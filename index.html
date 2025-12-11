@@ -1,0 +1,1799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DECA Practice Exam Platform</title>
+    
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Import Maps for React and Firebase -->
+    <script type="importmap">
+        {
+            "imports": {
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+                "lucide-react": "https://esm.sh/lucide-react@0.344.0",
+                "firebase/app": "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js",
+                "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js",
+                "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js"
+            }
+        }
+    </script>
+    
+    <!-- Load Babel for JSX compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Load jspdf and autotable for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f9;
+        }
+
+        /* Custom scrollbar for aesthetics */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .no-select { user-select: none; }
+        
+        /* New styles for top-tab layout */
+        .tab-active {
+            border-color: #3b82f6; /* blue-500 */
+            color: #3b82f6; /* blue-500 */
+            font-weight: 600;
+        }
+        .main-content-container {
+            max-width: 1280px; /* Equivalent to max-w-7xl used previously */
+            margin: auto;
+            padding: 1rem 2rem; /* Adjusted padding */
+        }
+        
+        /* Utility class to help long text wrap in table cells/small containers */
+        .break-word-strict {
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        // FIXED IMPORTS: Replaced SquareCheckBig with CheckSquare and added Clock
+        import { Save, Trash2, Plus, Play, FileText, Settings, BarChart3, Upload, Check, AlertCircle, X, Download, Sparkles, Loader2, Database, Info, Target, List, GraduationCap, Lock, Flag, LogOut, Grid, XCircle, Home, CheckSquare, Clock, Edit, FileUp, Zap, Eye } from 'lucide-react';
+        import { initializeApp } from "firebase/app";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "firebase/auth";
+        import { getFirestore, collection, doc, addDoc, deleteDoc, updateDoc, onSnapshot, writeBatch, query, getDocs } from "firebase/firestore";
+
+        // ------------------------------------------------------------------
+        // CONFIGURATION
+        // ------------------------------------------------------------------
+        
+        // --- API & Firebase Config (Using Canvas Globals) ---
+        // INJECTED USER'S CONFIGURATION
+        const FIREBASE_CONFIG_USER = {
+            apiKey: "AIzaSyBjAuXLXvPOYyCrWe8oplahBWMsnASi6Qo",
+            authDomain: "aidecaexams.firebaseapp.com",
+            projectId: "aidecaexams",
+            storageBucket: "aidecaexams.firebasestorage.app",
+            messagingSenderId: "895592591782",
+            appId: "1:895592591782:web:83ac6d77e3f6644c589f67",
+            measurementId: "G-D849ZSZG5K"
+        };
+
+        const APP_CONFIG = {
+            // Priority: User's config if valid, otherwise fallback to canvas context
+            FIREBASE_CONFIG: FIREBASE_CONFIG_USER.projectId ? FIREBASE_CONFIG_USER : JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}'),
+            // Priority: User's explicit API key
+            GEMINI_API_KEY: "AIzaSyCu1RG9kl-tZVkKM8V9NDLJ2GVhmxkQEj0", 
+            ADMIN_PASSWORD: "deca-admin-2025", 
+            APP_ID: typeof __app_id !== 'undefined' ? __app_id : 'default-deca-app',
+            GEMINI_MODEL: 'gemini-2.5-flash-preview-09-2025'
+        };
+
+        let app, auth, db, useCloud = false;
+        let globalInitError = null;
+
+        if (APP_CONFIG.FIREBASE_CONFIG && APP_CONFIG.FIREBASE_CONFIG.projectId) {
+            try {
+                app = initializeApp(APP_CONFIG.FIREBASE_CONFIG);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                useCloud = true;
+            } catch (e) {
+                console.error("Firebase Init Failed:", e);
+                globalInitError = e.message;
+            }
+        }
+        
+        // --- DATA CONSTANTS ---
+        const INSTRUCTIONAL_AREAS = {
+            BL: "Business Law",
+            CM: "Channel Management",
+            CO: "Communications",
+            CR: "Customer Relations",
+            EC: "Economics",
+            EI: "Emotional Intelligence",
+            EN: "Entrepreneurship",
+            FI: "Financial Analysis",
+            FM: "Financial-Information Mgmt",
+            HR: "Human Resources Mgmt",
+            IM: "Information Management",
+            MK: "Marketing",
+            MP: "Market Planning",
+            NF: "Marketing-Information Mgmt",
+            OP: "Operations",
+            PD: "Professional Development",
+            PI: "Pricing",
+            PJ: "Project Management",
+            PM: "Product/Service Mgmt",
+            PR: "Promotion",
+            QM: "Quality Management",
+            RM: "Risk Management",
+            SE: "Selling",
+            SM: "Strategic Management",
+            KM: "Knowledge Management", // Added KM
+            // PFL Areas
+            PF_EI: "Earning Income (PFL)",
+            PF_SP: "Spending (PFL)",
+            PF_SA: "Saving (PFL)",
+            PF_IN: "Investing (PFL)",
+            PF_CR: "Managing Credit (PFL)",
+            PF_MR: "Managing Risk (PFL)"
+        };
+
+        // UPDATED: Renamed keys: District -> DLC, Association -> SLC
+        const DEFAULT_BLUEPRINTS = {
+            "Business Management and Administration": { 
+                BL: { DLC: 5, SLC: 5, ICDC: 5 }, CO: { DLC: 7, SLC: 6, ICDC: 6 }, CR: { DLC: 2, SLC: 2, ICDC: 1 }, EC: { DLC: 6, SLC: 5, ICDC: 4 }, EI: { DLC: 9, SLC: 8, ICDC: 6 }, EN: { DLC: 1, SLC: 0, ICDC: 0 }, FI: { DLC: 7, SLC: 6, ICDC: 5 }, HR: { DLC: 1, SLC: 0, ICDC: 0 }, IM: { DLC: 7, SLC: 6, ICDC: 6 }, KM: { DLC: 6, SLC: 7, ICDC: 8 }, MK: { DLC: 1, SLC: 1, ICDC: 1 }, OP: { DLC: 21, SLC: 24, ICDC: 26 }, PD: { DLC: 6, SLC: 5, ICDC: 4 }, PJ: { DLC: 6, SLC: 7, ICDC: 8 }, QM: { DLC: 3, SLC: 4, ICDC: 5 }, RM: { DLC: 4, SLC: 5, ICDC: 5 }, SM: { DLC: 8, SLC: 9, ICDC: 10 } 
+            },
+            "Entrepreneurship": { 
+                BL: { DLC: 4, SLC: 4, ICDC: 3 }, CM: { DLC: 3, SLC: 3, ICDC: 3 }, CO: { DLC: 1, SLC: 0, ICDC: 0 }, CR: { DLC: 1, SLC: 1, ICDC: 1 }, EC: { DLC: 3, SLC: 3, ICDC: 2 }, EI: { DLC: 6, SLC: 6, ICDC: 4 }, EN: { DLC: 14, SLC: 13, ICDC: 14 }, FI: { DLC: 10, SLC: 9, ICDC: 11 }, HR: { DLC: 5, SLC: 4, ICDC: 4 }, IM: { DLC: 4, SLC: 3, ICDC: 2 }, MP: { DLC: 5, SLC: 6, ICDC: 6 }, MK: { DLC: 1, SLC: 1, ICDC: 1 }, NF: { DLC: 2, SLC: 3, ICDC: 2 }, OP: { DLC: 13, SLC: 13, ICDC: 14 }, PI: { DLC: 2, SLC: 3, ICDC: 2 }, PM: { DLC: 4, SLC: 4, ICDC: 4 }, PD: { DLC: 5, SLC: 5, ICDC: 4 }, PR: { DLC: 6, SLC: 7, ICDC: 8 }, QM: { DLC: 1, SLC: 1, ICDC: 1 }, RM: { DLC: 2, SLC: 3, ICDC: 4 }, SE: { DLC: 1, SLC: 1, ICDC: 1 }, SM: { DLC: 7, SLC: 7, ICDC: 8 } 
+            },
+            "Finance": { 
+                BL: { DLC: 7, SLC: 8, ICDC: 7 }, CO: { DLC: 5, SLC: 4, ICDC: 3 }, CR: { DLC: 5, SLC: 5, ICDC: 4 }, EC: { DLC: 6, SLC: 5, ICDC: 4 }, EI: { DLC: 9, SLC: 8, ICDC: 6 }, EN: { DLC: 1, SLC: 0, ICDC: 0 }, FI: { DLC: 24, SLC: 28, ICDC: 30 }, FM: { DLC: 9, SLC: 10, ICDC: 12 }, HR: { DLC: 1, SLC: 0, ICDC: 0 }, IM: { DLC: 6, SLC: 5, ICDC: 5 }, MK: { DLC: 1, SLC: 1, ICDC: 1 }, OP: { DLC: 6, SLC: 5, ICDC: 4 }, PD: { DLC: 13, SLC: 14, ICDC: 15 }, RM: { DLC: 6, SLC: 7, ICDC: 9 }, SM: { DLC: 1, SLC: 0, ICDC: 0 } 
+            },
+            "Hospitality and Tourism": { 
+                BL: { DLC: 3, SLC: 3, ICDC: 2 }, CO: { DLC: 5, SLC: 4, ICDC: 3 }, CR: { DLC: 8, SLC: 9, ICDC: 9 }, EC: { DLC: 6, SLC: 6, ICDC: 5 }, EI: { DLC: 9, SLC: 8, ICDC: 7 }, EN: { DLC: 1, SLC: 0, ICDC: 0 }, FI: { DLC: 8, SLC: 7, ICDC: 7 }, HR: { DLC: 2, SLC: 1, ICDC: 1 }, IM: { DLC: 14, SLC: 15, ICDC: 15 }, KM: { DLC: 0, SLC: 1, ICDC: 1 }, MK: { DLC: 1, SLC: 1, ICDC: 2 }, OP: { DLC: 13, SLC: 13, ICDC: 13 }, PI: { DLC: 1, SLC: 1, ICDC: 1 }, PM: { DLC: 6, SLC: 7, ICDC: 9 }, PD: { DLC: 8, SLC: 7, ICDC: 6 }, PR: { DLC: 2, SLC: 3, ICDC: 3 }, QM: { DLC: 1, SLC: 1, ICDC: 1 }, RM: { DLC: 1, SLC: 1, ICDC: 2 }, SE: { DLC: 7, SLC: 8, ICDC: 9 }, SM: { DLC: 3, SLC: 2, ICDC: 2 } 
+            },
+            "Marketing": { 
+                BL: { DLC: 2, SLC: 2, ICDC: 1 }, CM: { DLC: 5, SLC: 6, ICDC: 7 }, CO: { DLC: 5, SLC: 4, ICDC: 3 }, CR: { DLC: 2, SLC: 2, ICDC: 1 }, EC: { DLC: 6, SLC: 5, ICDC: 4 }, EI: { DLC: 9, SLC: 8, ICDC: 6 }, EN: { DLC: 1, SLC: 0, ICDC: 0 }, FI: { DLC: 6, SLC: 5, ICDC: 4 }, HR: { DLC: 1, SLC: 0, ICDC: 0 }, IM: { DLC: 5, SLC: 4, ICDC: 3 }, MP: { DLC: 4, SLC: 4, ICDC: 5 }, MK: { DLC: 1, SLC: 1, ICDC: 1 }, NF: { DLC: 11, SLC: 14, ICDC: 16 }, OP: { DLC: 6, SLC: 5, ICDC: 4 }, PI: { DLC: 3, SLC: 4, ICDC: 4 }, PM: { DLC: 11, SLC: 13, ICDC: 15 }, PD: { DLC: 6, SLC: 5, ICDC: 5 }, PR: { DLC: 9, SLC: 11, ICDC: 13 }, SE: { DLC: 6, SLC: 7, ICDC: 8 }, SM: { DLC: 1, SLC: 0, ICDC: 0 } 
+            },
+            "Personal Financial Literacy": { 
+                PF_EI: { DLC: 25, SLC: 20, ICDC: 16 }, PF_SP: { DLC: 14, SLC: 14, ICDC: 14 }, PF_SA: { DLC: 15, SLC: 14, ICDC: 13 }, PF_IN: { DLC: 15, SLC: 19, ICDC: 21 }, PF_CR: { DLC: 16, SLC: 19, ICDC: 21 }, PF_MR: { DLC: 15, SLC: 14, ICDC: 15 } 
+            },
+            "Business Administration Core": { 
+                BL: { DLC: 1, SLC: 1, ICDC: 4 }, CO: { DLC: 15, SLC: 15, ICDC: 11 }, CR: { DLC: 5, SLC: 5, ICDC: 4 }, EC: { DLC: 7, SLC: 7, ICDC: 12 }, EI: { DLC: 22, SLC: 22, ICDC: 19 }, EN: { DLC: 0, SLC: 0, ICDC: 1 }, FI: { DLC: 16, SLC: 16, ICDC: 13 }, HR: { DLC: 1, SLC: 1, ICDC: 1 }, IM: { DLC: 10, SLC: 10, ICDC: 17 }, MK: { DLC: 1, SLC: 1, ICDC: 1 }, OP: { DLC: 11, SLC: 11, ICDC: 13 }, PD: { DLC: 11, SLC: 11, ICDC: 9 }, SM: { DLC: 0, SLC: 0, ICDC: 1 } 
+            },
+        };
+
+        
+        // DECA EVENT LIST (Used for selection dropdowns and blueprint display)
+        const DECA_EVENTS = {
+            'Business Administration Core': ['PBM', 'PEN', 'PFN', 'PHT', 'PMK'],
+            'Business Management and Administration': ['BLTDM', 'HRM'], 
+            'Entrepreneurship': ['ENT', 'ETDM'],
+            'Finance': ['ACT', 'BFS', 'FTDM', 'FCE'], 
+            'Hospitality and Tourism': ['HTDM', 'HLM', 'QSRM', 'RFSM', 'TTDM', 'HTPS'], 
+            'Marketing': ['AAM', 'ASM', 'BSM', 'BTDM', 'FMS', 'MCS', 'MTDM', 'RMS', 'SEM', 'STDM', 'IMCE', 'IMCP', 'IMCS', 'PSE'], 
+            'Personal Financial Literacy': ['PFL'],
+        };
+
+        const INITIAL_QUESTIONS = [
+            { id: "q1", cluster: "Finance", category: "FI", pi: "Explain the nature of financial risk management", question: "Which risk type involves changes in interest rates or economic conditions that affect investment value?", options: ["A. Business Risk", "B. Financial Risk", "C. Market Risk", "D. Liquidity Risk"], answer: "C", rationale: "Market risk encompasses broad economic factors like interest rate changes or political unrest affecting the entire market." },
+            { id: "q2", cluster: "Marketing", category: "CM", pi: "Explain the nature of channels of distribution", question: "A marketing channel that involves no intermediaries is defined as a(n):", options: ["A. Indirect channel", "B. Direct channel", "C. Exclusive channel", "D. Selective channel"], answer: "B", rationale: "A direct channel moves a product directly from the producer to the consumer without any intermediaries." },
+            { id: "q3", cluster: "Business Administration Core", category: "CO", pi: "Demonstrate active listening skills", question: "What is the primary purpose of paraphrasing a speaker's message during a conversation?", options: ["A. To correct any inaccuracies in the message.", "B. To demonstrate comprehension and ensure clarity.", "C. To dominate the conversation flow.", "D. To prepare your own immediate rebuttal."], answer: "B", rationale: "Paraphrasing confirms that the listener correctly understood the message and provides the speaker with clarity." }
+        ];
+
+        // --- UTILS ---
+        const cleanAndParseJSON = (text) => {
+            try {
+                let cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const firstBracket = cleanText.indexOf('[');
+                const lastBracket = cleanText.lastIndexOf(']');
+                if (firstBracket !== -1 && lastBracket !== -1) {
+                    cleanText = cleanText.substring(firstBracket, lastBracket + 1);
+                }
+                // Remove trailing commas before brackets/braces
+                cleanText = cleanText.replace(/,\s*([\]}])/g, '$1'); 
+                return JSON.parse(cleanText);
+            } catch (e) {
+                console.error("JSON Parse Error:", e, text.substring(0, 500));
+                return [];
+            }
+        };
+        
+        // --- API CALL HANDLER ---
+        async function fetchGeminiContent(prompt) {
+            if (!APP_CONFIG.GEMINI_API_KEY) {
+                // If API key is empty, the environment will attempt to provide credentials.
+            }
+            
+            // FIXED: Closed the template literal correctly
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${APP_CONFIG.GEMINI_MODEL}:generateContent?key=${APP_CONFIG.GEMINI_API_KEY}`;
+            const isJson = prompt.includes("JSON Format:") || prompt.includes("responseMimeType");
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }]
+            };
+            
+            if (isJson) {
+                payload.generationConfig = { responseMimeType: "application/json" };
+            }
+
+            const MAX_RETRIES = 3;
+            for (let i = 0; i < MAX_RETRIES; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    
+                    const result = await response.json();
+                    return result.candidates?.[0]?.content?.parts?.[0]?.text || "No response generated.";
+
+                } catch (error) {
+                    console.warn(`Attempt ${i + 1} failed.`, error);
+                    if (i === MAX_RETRIES - 1) throw new Error("Failed to generate content after multiple retries.");
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000)); // Exponential backoff
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // REACT COMPONENTS
+        // ------------------------------------------------------------------
+
+        // --- EXAM SESSION ---
+
+        function ExamSession({ exam, mode, setMode, userAnswers, setUserAnswers, currentIndex, setCurrentIndex, onExit, onSaveSubmission, studentName }) {
+            const currentQ = exam[currentIndex];
+            const [explanation, setExplanation] = useState(null);
+            const [isExplaining, setIsExplaining] = useState(false);
+            const [flagged, setFlagged] = useState(new Set());
+            const [showReview, setShowReview] = useState(false);
+            const contentRef = useRef(null);
+
+            useEffect(() => { setExplanation(null); }, [currentIndex]);
+            
+            // Scroll to top of content when question changes
+            useEffect(() => {
+                if (contentRef.current) {
+                    contentRef.current.scrollTop = 0;
+                }
+            }, [currentIndex]);
+
+
+            const handleAnswer = (optIndex) => {
+                if (mode === 'review') return;
+                const letter = ['A','B','C','D'][optIndex];
+                setUserAnswers(prev => ({ ...prev, [currentIndex]: letter }));
+            };
+
+            const toggleFlag = () => {
+                const newFlags = new Set(flagged);
+                if (newFlags.has(currentIndex)) newFlags.delete(currentIndex);
+                else newFlags.add(currentIndex);
+                setFlagged(newFlags);
+            };
+
+            const explainConcept = async () => {
+                setIsExplaining(true);
+                try {
+                    const prompt = `Act as an expert DECA coach. Provide a detailed, pedagogical explanation for why the correct answer is right, and briefly explain why the other options are wrong. The explanation should be suitable for a high school student.\nQuestion: ${currentQ.question}\nOptions: ${currentQ.options.join(', ')}\nCorrect Answer: ${currentQ.answer} (${currentQ.options.find(o => o.startsWith(currentQ.answer))}). Rationale: ${currentQ.rationale}`;
+                    const text = await fetchGeminiContent(prompt);
+                    setExplanation(text);
+                } catch(e) { console.error(e); setExplanation("Error connecting to AI Tutor. Check API Key/Connection."); } finally { setIsExplaining(false); }
+            };
+
+            const downloadPDF = () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                const correctCount = exam.filter((q, i) => userAnswers[i] === q.answer).length;
+                const score = Math.round((correctCount / exam.length) * 100);
+                
+                doc.setFontSize(20);
+                doc.text("DECA Practice Test Results", 14, 20);
+                
+                doc.setFontSize(12);
+                doc.text(`Student: ${studentName}`, 14, 30);
+                doc.text(`Event: ${currentQ.cluster || 'N/A'}`, 14, 36);
+                doc.text(`Score: ${score}% (${correctCount}/${exam.length})`, 14, 42);
+                doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 48);
+                
+                const tableData = exam.map((q, i) => {
+                    const userAnswer = userAnswers[i] || "Skipped";
+                    const isCorrect = userAnswer === q.answer;
+                    const piText = q.pi ? `${q.category}: ${q.pi}` : q.category;
+
+                    return [
+                        i + 1,
+                        isCorrect ? "Correct" : "Incorrect",
+                        piText,
+                        q.question.substring(0, 70) + "...",
+                        `You: ${userAnswers[i] || 'N/A'} | Key: ${q.answer}`,
+                        q.rationale.substring(0, 100) + "..."
+                    ];
+                });
+
+                doc.autoTable({
+                    startY: 55,
+                    head: [['#', 'Status', 'PI/Area', 'Question Snippet', 'Answer', 'Rationale Snippet']],
+                    body: tableData,
+                    headStyles: { fillColor: [30, 64, 175] },
+                    columnStyles: { 1: { fontStyle: 'bold' }, 5: { cellWidth: 50 } },
+                    didParseCell: (data) => {
+                        if (data.column.index === 1) {
+                            if (data.cell.raw === "Incorrect") data.cell.styles.textColor = [220, 53, 69];
+                            else if (data.cell.raw === "Correct") data.cell.styles.textColor = [25, 135, 84];
+                        }
+                    }
+                });
+
+                doc.save(`${studentName.replace(/\s+/g,'_')}_deca_results.pdf`);
+            };
+
+            const handleSubmit = () => {
+                const correctCount = exam.filter((q, i) => userAnswers[i] === q.answer).length;
+                const score = Math.round((correctCount / exam.length) * 100);
+                onSaveSubmission({
+                    studentName,
+                    score,
+                    date: new Date().toISOString(),
+                    totalQuestions: exam.length,
+                    correctCount: correctCount,
+                    cluster: currentQ.cluster || "Mixed"
+                });
+                setMode('results');
+            };
+
+            const handleCancel = () => {
+                if (window.confirm("Are you sure you want to cancel this session? All progress will be lost.")) {
+                    onExit();
+                }
+            };
+
+            if (mode === 'results') {
+                const correctCount = exam.filter((q, i) => userAnswers[i] === q.answer).length;
+                const score = Math.round((correctCount / exam.length) * 100);
+                
+                return (
+                    <div className="p-8 text-center flex flex-col items-center justify-center h-full">
+                        {/* FIXED ICON: Replaced SquareCheckBig with CheckSquare */}
+                        <CheckSquare size={64} className="text-green-500 mb-4"/>
+                        <div className="text-6xl font-bold text-blue-600 mb-4">{score}%</div>
+                        <h2 className="text-2xl font-bold mb-6">Exam Complete, {studentName}!</h2>
+                        <div className="text-lg text-slate-600 mb-8">{correctCount} out of {exam.length} correct.</div>
+
+                        <div className="flex gap-4 flex-wrap justify-center">
+                            <button onClick={() => { setMode('review'); setCurrentIndex(0); }} className="px-6 py-2 border border-blue-500 text-blue-600 rounded hover:bg-blue-50 flex items-center gap-2"><Eye size={18}/> Review Answers</button>
+                            <button onClick={downloadPDF} className="px-6 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center gap-2"><Download size={18}/> Download Report</button>
+                            <button onClick={onExit} className="px-6 py-2 bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-2"><Home size={18}/> Exit</button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (showReview) {
+                const answeredCount = Object.keys(userAnswers).length;
+                const unansweredCount = exam.length - answeredCount;
+                const flaggedCount = flagged.size;
+
+                return (
+                    <div className="h-full flex flex-col p-8 bg-slate-50">
+                        <div className="flex justify-between items-center mb-6 border-b pb-4">
+                            <h2 className="text-2xl font-bold text-slate-800">Review Before Submission</h2>
+                            <button onClick={() => setShowReview(false)} className="px-4 py-2 border rounded bg-slate-100 hover:bg-slate-200 text-slate-700">Back to Exam</button>
+                        </div>
+                        
+                        <div className="flex gap-4 mb-6 text-sm font-medium">
+                            {/* FIXED ICON: Replaced SquareCheckBig with CheckSquare */}
+                            <span className="flex items-center gap-1 text-green-600"><CheckSquare size={16}/> Answered: {answeredCount}</span>
+                            <span className="flex items-center gap-1 text-red-600"><XCircle size={16}/> Unanswered: {unansweredCount}</span>
+                            <span className="flex items-center gap-1 text-amber-600"><Flag size={16}/> Flagged: {flaggedCount}</span>
+                        </div>
+
+                        <div className="flex-1 overflow-auto pr-2 grid grid-cols-5 md:grid-cols-10 gap-3 content-start border p-4 rounded-xl bg-white">
+                            {exam.map((q, i) => {
+                                const answered = userAnswers[i] !== undefined;
+                                const isFlagged = flagged.has(i);
+                                let bg = answered ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-300 text-slate-600';
+                                if (isFlagged) bg = 'bg-amber-100 border-amber-400 ring-2 ring-amber-400 text-amber-900';
+                                
+                                return (
+                                    <button 
+                                        key={i} 
+                                        onClick={() => { setCurrentIndex(i); setShowReview(false); }}
+                                        className={`p-3 rounded border text-sm font-bold shadow-sm transition-all relative ${bg}`}
+                                    >
+                                        {i + 1}
+                                        {isFlagged && <Flag size={12} className="absolute top-1 right-1 text-amber-600 fill-amber-600"/>}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                        
+                        <div className="mt-6 border-t pt-4 flex justify-end gap-3">
+                             <button onClick={() => unansweredCount > 0 ? alert(`You have ${unansweredCount} unanswered questions. Please answer them or click submit again to confirm.`): handleSubmit()} 
+                                className="px-8 py-3 bg-green-600 text-white font-bold rounded shadow-lg hover:bg-green-700 flex items-center gap-2"
+                             >
+                                {/* FIXED ICON: Replaced SquareCheckBig with CheckSquare */}
+                                <CheckSquare size={20}/> Submit Final Exam
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Main Exam View
+            return (
+                <div className="flex flex-col h-full w-full max-w-5xl mx-auto bg-white overflow-hidden relative">
+                    
+                    {/* 1. Header (Fixed Height) */}
+                    <div className="h-20 p-4 border-b flex justify-between items-center bg-slate-100 flex-shrink-0 z-10 sticky top-0">
+                        <div className="flex flex-col">
+                            <span className="font-bold text-slate-700 text-lg">{currentQ.cluster} - {currentQ.category}</span>
+                            <span className="text-xs text-slate-500">Student: {studentName}</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            {/* FIXED ICON: Added Clock icon */}
+                            <div className="flex items-center text-red-600 font-bold text-xl border-2 border-red-300 bg-red-50 p-2 rounded-lg">
+                                <Clock size={20} className="mr-2"/>
+                                <span>90:00</span> {/* Placeholder for live timer implementation */}
+                            </div>
+                            <button onClick={handleCancel} className="text-red-500 hover:bg-red-100 p-2 rounded-full transition-colors"><X size={24}/></button>
+                        </div>
+                    </div>
+
+                    {/* 2. Content Area (Scrollable Middle) */}
+                    <div ref={contentRef} className="flex-1 p-6 md:p-12 overflow-y-auto bg-slate-50 scroll-smooth">
+                        <div className="max-w-3xl mx-auto pb-6">
+                            <div className="text-lg font-bold text-blue-600 mb-2">Q{currentIndex + 1} of {exam.length}</div>
+                            <p className="text-xl mb-8 leading-relaxed font-medium text-slate-800 min-h-[80px]">{currentQ.question}</p>
+                            
+                            <div className="space-y-4">
+                                {currentQ.options.map((opt, idx) => {
+                                    const letter = ['A','B','C','D'][idx];
+                                    const isSel = userAnswers[currentIndex] === letter;
+                                    const isCor = currentQ.answer === letter;
+                                    
+                                    let cls = "w-full text-left p-5 rounded-lg border-2 flex gap-4 transition-all items-center group shadow-sm ";
+                                    
+                                    if (mode === 'review') {
+                                        if (isCor) cls += "bg-green-100 border-green-500 text-green-900";
+                                        else if (isSel) cls += "bg-red-50 border-red-300";
+                                        else cls += "border-slate-200 opacity-60";
+                                    } else {
+                                        cls += isSel ? "bg-blue-50 border-blue-600 ring-2 ring-blue-300" : "bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50/50";
+                                    }
+
+                                    return (
+                                        <button key={idx} onClick={() => handleAnswer(idx)} disabled={mode === 'review'} className={cls}>
+                                            <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold border ${isSel || (mode === 'review' && isCor) ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 text-slate-500 border-slate-300 group-hover:border-blue-400'}`}>
+                                                {letter}
+                                            </span>
+                                            <span className="text-base">{opt}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Review/Rationale (visible in review mode) */}
+                            {mode === 'review' && (
+                                <div className="mt-8 p-6 bg-white rounded-xl border border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-4">
+                                    <h4 className="font-bold text-slate-800 mb-2 flex items-center gap-2"><Info size={18}/> Rationale & PI: {currentQ.pi}</h4>
+                                    <p className="text-slate-600 leading-relaxed border-b pb-3 mb-3">{currentQ.rationale}</p>
+                                    {!explanation ? (
+                                        <button onClick={explainConcept} disabled={isExplaining} className="mt-4 text-purple-600 font-bold flex items-center gap-2 hover:bg-purple-50 px-4 py-2 rounded transition-colors text-sm border border-purple-200 w-full justify-center">
+                                            {isExplaining ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>} 
+                                            {isExplaining ? "AI Tutor is thinking..." : "Ask AI for a Simple Explanation"}
+                                        </button>
+                                    ) : (
+                                        <div className="mt-4 text-sm text-purple-900 bg-purple-50 p-4 rounded-lg border border-purple-100 flex gap-3">
+                                            <GraduationCap size={20} className="flex-shrink-0 mt-0.5 text-purple-600"/>
+                                            <div>{explanation}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 3. Footer (Fixed Height) */}
+                    <div className="h-20 p-4 border-t bg-white flex justify-between items-center flex-shrink-0 z-10 sticky bottom-0">
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={toggleFlag} 
+                                className={`px-4 py-2 rounded-lg border transition-colors flex items-center gap-2 ${flagged.has(currentIndex) ? 'bg-amber-100 border-amber-300 text-amber-700 font-bold' : 'bg-slate-50 border-slate-300 text-slate-600'}`}
+                                title="Flag for Review"
+                            >
+                                <Flag size={16} className={flagged.has(currentIndex) ? 'fill-amber-600' : ''}/>
+                                {flagged.has(currentIndex) ? 'Flagged' : 'Flag Question'}
+                            </button>
+                            <button onClick={() => setShowReview(true)} className="px-4 py-2 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium">
+                                Review ({Object.keys(userAnswers).length} / {exam.length})
+                            </button>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => setCurrentIndex(c => Math.max(0, c-1))} 
+                                disabled={currentIndex===0} 
+                                className="px-6 py-2 rounded-l-lg border border-slate-300 hover:bg-slate-50 disabled:opacity-50 font-medium"
+                            >
+                                Previous
+                            </button>
+                            
+                            {mode === 'taking' ? (
+                                <button 
+                                    onClick={() => currentIndex === exam.length - 1 ? setShowReview(true) : setCurrentIndex(c => c+1)} 
+                                    className="px-8 py-2 bg-blue-600 text-white rounded-r-lg font-bold hover:bg-blue-700 shadow-md transition-transform active:scale-95 disabled:opacity-50"
+                                    disabled={currentIndex === exam.length - 1 && Object.keys(userAnswers).length < exam.length}
+                                >
+                                    {currentIndex === exam.length - 1 ? 'Go to Review' : 'Next Question'}
+                                </button>
+                            ) : (
+                                 <button onClick={() => setCurrentIndex(c => Math.min(exam.length - 1, c+1))} disabled={currentIndex===exam.length - 1} className="px-8 py-2 bg-slate-800 text-white rounded-r-lg font-bold hover:bg-slate-900 disabled:opacity-50">Next &rarr;</button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- GENERATOR TAB (Student Dashboard) ---
+
+        function GeneratorTab({ clusters, selectedCluster, setSelectedCluster, examLength, setExamLength, onStartExam, questions, onAddQuestions, submissions, blueprints, storageMode, errorMsg }) {
+            const [useAI, setUseAI] = useState(false);
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [progress, setProgress] = useState("");
+            const [studentName, setStudentName] = useState(localStorage.getItem('studentName') || "");
+            // NEW STATE: To track selected level in the Generator
+            const [selectedLevel, setSelectedLevel] = useState('ICDC'); 
+
+            // Save name locally whenever it changes
+            useEffect(() => {
+                localStorage.setItem('studentName', studentName);
+            }, [studentName]);
+            
+            // Derive the correct blueprint based on cluster and selected level
+            const currentBlueprint = useMemo(() => {
+                const clusterBP = blueprints[selectedCluster] || {};
+                
+                // If the BP is an object containing objects (nested by level)
+                if (Object.values(clusterBP).some(ia => typeof ia === 'object')) {
+                    const levelKey = selectedLevel;
+                    return Object.fromEntries(
+                        Object.entries(clusterBP).map(([iaCode, levelCounts]) => [iaCode, levelCounts[levelKey] || 0])
+                    );
+                }
+                // Fallback for flat blueprint structure (should not happen with new default data)
+                return clusterBP;
+            }, [selectedCluster, selectedLevel, blueprints]);
+
+            const handleGenerate = async () => {
+                if (!studentName.trim()) { alert("Please enter your name to start the exam."); return; }
+                if (!selectedCluster) { alert("Please select a Career Cluster."); return; }
+                
+                setIsGenerating(true);
+                
+                // 1. Determine target question counts by instructional area (IA)
+                const blueprint = currentBlueprint; // Use memoized blueprint based on level
+                const totalBlueprintCount = Object.values(blueprint).reduce((a, b) => a + b, 0);
+                
+                if (totalBlueprintCount === 0) {
+                     alert(`Error: No blueprint questions defined for ${selectedCluster} at ${selectedLevel}. Please check the Exam Blueprints tab.`);
+                     setIsGenerating(false);
+                     return;
+                }
+                
+                // 2. Filter available questions into pools (Simplified Pool Logic for Demo)
+                let finalExam = [];
+                const poolByCategory = {};
+                
+                questions.forEach(q => {
+                    if (q.cluster === selectedCluster || q.cluster === "Business Administration Core" || q.cluster === 'AI Generated') {
+                        if (!poolByCategory[q.category]) poolByCategory[q.category] = [];
+                        poolByCategory[q.category].push(q);
+                    }
+                });
+
+                const categories = Object.keys(blueprint).sort();
+                let newQuestionsAccumulator = [];
+
+                // 3. Fill exam based on blueprint
+                for (const cat of categories) {
+                    // FIX: Ensure we treat the value from the currentLevelBlueprint as the target count
+                    const targetCount = blueprint[cat] || 0; 
+                    if (targetCount <= 0) continue;
+
+                    const available = poolByCategory[cat] || [];
+                    const shuffledAvailable = [...available].sort(() => 0.5 - Math.random());
+                    const existingToUse = shuffledAvailable.slice(0, targetCount); // Use raw count
+                    finalExam.push(...existingToUse);
+
+                    const missingCount = targetCount - existingToUse.length;
+
+                    // 4. AI or Placeholder fill for missing questions
+                    if (missingCount > 0) {
+                        if (useAI && APP_CONFIG.GEMINI_API_KEY !== "") {
+                            setProgress(`Generating ${missingCount} questions for ${INSTRUCTIONAL_AREAS[cat]}...`);
+                            try {
+                                const prompt = `
+                                    Generate ${missingCount} multiple-choice questions for DECA exam.
+                                    Cluster: ${selectedCluster}
+                                    Instructional Area: ${INSTRUCTIONAL_AREAS[cat]} (${cat}).
+                                    Difficulty: High School Competition Level.
+                                    Format: JSON array ONLY: [{"question": "...", "options": ["A", "B", "C", "D"], "answer": "A", "rationale": "..."}]
+                                    Do NOT include markdown formatting.
+                                `;
+                                
+                                const text = await fetchGeminiContent(prompt);
+                                const parsed = cleanAndParseJSON(text);
+                                const generated = parsed.map(q => ({
+                                    cluster: "AI Generated",
+                                    category: cat,
+                                    pi: "AI Generated based on Blueprint",
+                                    question: q.question,
+                                    options: q.options,
+                                    answer: q.answer,
+                                    rationale: q.rationale || "No rationale provided."
+                                }));
+                                
+                                newQuestionsAccumulator.push(...generated);
+                                finalExam.push(...generated);
+                                await new Promise(r => setTimeout(r, 400));
+                            } catch (e) {
+                                console.error("Error generating for", cat, e);
+                                for(let i=0; i<missingCount; i++) finalExam.push(createPlaceholder(cat, selectedCluster, i));
+                            }
+                        } else {
+                            for(let i=0; i<missingCount; i++) finalExam.push(createPlaceholder(cat, selectedCluster, i));
+                        }
+                    }
+                }
+
+                // 5. Save new AI-generated questions to the bank
+                if (newQuestionsAccumulator.length > 0) {
+                    await onAddQuestions(newQuestionsAccumulator);
+                }
+
+                // 6. Final shuffle and trim/pad
+                finalExam = finalExam.sort(() => 0.5 - Math.random());
+                if (finalExam.length > examLength) finalExam = finalExam.slice(0, examLength);
+                while (finalExam.length < examLength) {
+                    finalExam.push(createPlaceholder("SM", selectedCluster, finalExam.length));
+                }
+                
+                // FINAL CHECK: Ensure finalExam has questions before transition
+                if (finalExam.length === 0) {
+                    alert("Exam generation failed. Check question bank or AI settings.");
+                    setIsGenerating(false);
+                    return;
+                }
+
+                setIsGenerating(false);
+                onStartExam(finalExam, studentName);
+            };
+
+            const createPlaceholder = (cat, cluster, i) => ({
+                id: `gap-${cat}-${Date.now()}-${i}`,
+                cluster: cluster,
+                category: cat,
+                pi: "Blueprint Gap",
+                question: `[Placeholder Q${i + 1}] Not enough questions in bank for ${INSTRUCTIONAL_AREAS[cat]} (Targeted Cluster: ${cluster}). Add more or enable AI Fill.`,
+                options: ["A. Placeholder Option A", "B. Placeholder Option B", "C. Placeholder Option C", "D. Placeholder Option D"],
+                answer: "A",
+                rationale: "Placeholder question. The core content for this Instructional Area is missing from the Question Bank."
+            });
+
+            return (
+                <div className="p-8 h-full flex flex-col">
+                    <h2 className="text-2xl font-bold mb-6 text-slate-800">Generate Practice Exam</h2>
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-y-auto">
+                        
+                        <div className="md:col-span-2 space-y-6">
+                            
+                            {/* Student Info */}
+                            <div className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+                                <label className="block text-sm font-medium text-slate-600 mb-2">Student Name</label>
+                                <input 
+                                    type="text" 
+                                    value={studentName} 
+                                    onChange={(e) => setStudentName(e.target.value)} 
+                                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                    placeholder="Enter your full name"
+                                />
+                            </div>
+
+                            {/* Cluster & Event Selection */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                    <label className="block text-sm font-medium text-slate-600 mb-2">Career Cluster</label>
+                                    <select value={selectedCluster} onChange={(e) => setSelectedCluster(e.target.value)} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                                        {Object.keys(DECA_EVENTS).map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                    <label className="block text-sm font-medium text-slate-600 mb-2">Event Type</label>
+                                    <select className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                                        {DECA_EVENTS[selectedCluster]?.map(e => <option key={e} value={e}>{e}</option>) || <option>Select a Cluster</option>}
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            {/* Length & Level - FIXED LEVEL SELECTION */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                    <label className="block text-sm font-medium text-slate-600 mb-2">Exam Length</label>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {[25, 50, 100].map(num => (
+                                            // REMOVED Qs from button text
+                                            <button key={num} onClick={() => setExamLength(num)} className={`py-3 rounded-lg border font-medium transition-all ${examLength === num ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-slate-200 hover:border-blue-300 text-slate-600'}`}>
+                                                {num}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                    <label className="block text-sm font-medium text-slate-600 mb-2">Exam Level</label>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {/* Renamed Display text: District -> DLC, Association -> SLC */}
+                                        {[
+                                            { key: 'DLC', display: 'DLC', full: 'District' },
+                                            { key: 'SLC', display: 'SLC', full: 'Association' },
+                                            { key: 'ICDC', display: 'ICDC', full: 'ICDC' }
+                                        ].map(level => (
+                                            <button 
+                                                key={level.key} 
+                                                onClick={() => setSelectedLevel(level.key)} 
+                                                className={`py-3 rounded-lg border font-medium transition-all text-xs 
+                                                    ${selectedLevel === level.key ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-slate-200 hover:border-blue-300 text-slate-600'}`}
+                                            >
+                                                {level.display}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* AI Toggle */}
+                            <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <input type="checkbox" id="useAI" checked={useAI} onChange={(e) => setUseAI(e.target.checked)} className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500" />
+                                    <label htmlFor="useAI" className="font-bold text-purple-900 cursor-pointer flex items-center gap-2"><Sparkles size={18}/> Enable AI Fill</label>
+                                </div>
+                                {APP_CONFIG.GEMINI_API_KEY === "" && useAI && (
+                                    <p className="text-xs text-red-600 ml-8 mt-2 flex items-center gap-1"><AlertCircle size={14}/> Warning: API Key is not set. AI generation may fail.</p>
+                                )}
+                            </div>
+
+                            {/* Start Button */}
+                            <div className="pt-4">
+                                <button 
+                                    onClick={handleGenerate} 
+                                    disabled={isGenerating || !studentName.trim() || !selectedCluster}
+                                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed transition-transform active:scale-95"
+                                >
+                                    {isGenerating ? <Loader2 className="animate-spin" /> : <Play size={20} />} 
+                                    {isGenerating ? "Building Exam..." : "Start Exam (90 Minutes)"}
+                                </button>
+                                {isGenerating && <p className="text-center text-sm text-slate-500 mt-2 animate-pulse">{progress || "Calculating blueprint needs..."}</p>}
+                            </div>
+                        </div>
+
+                        {/* Past Submissions & Stats */}
+                        <div className="md:col-span-1 space-y-6">
+                             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 h-fit shadow-sm">
+                                <h3 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                                    <Database size={18} className={storageMode === 'cloud' ? "text-green-600" : "text-amber-600"}/> 
+                                    Question Bank Status
+                                </h3>
+                                <div className="space-y-3 text-sm text-slate-600">
+                                    <div className="flex justify-between p-2 bg-white rounded border border-slate-200"><span>Total Questions:</span> <span className="font-mono font-bold text-lg text-blue-600">{questions.length}</span></div>
+                                    <div className="flex justify-between p-2 bg-white rounded border border-slate-200"><span>Target Cluster:</span> <span className="font-bold text-blue-600 truncate max-w-[150px]">{selectedCluster}</span></div>
+                                    {errorMsg ? (
+                                        <div className="mt-4 p-3 border border-red-200 bg-red-50 rounded text-xs text-red-700">
+                                            <div className="font-bold flex items-center gap-2 mb-1"><AlertCircle size={14}/> Connection Error</div>
+                                            {errorMsg}
+                                        </div>
+                                    ) : (
+                                        <div className={`mt-4 p-3 border rounded text-xs flex items-start gap-2 ${storageMode === 'cloud' ? 'bg-blue-50 border-blue-100 text-blue-800' : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
+                                            <Info size={14} className="flex-shrink-0 mt-0.5" />
+                                            <span>{storageMode === 'cloud' ? "Cloud connected. Data is persistent." : "Offline Mode. Data is saved locally in your browser."}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                                <h3 className="font-semibold text-slate-700 mb-4 flex items-center gap-2"><List size={18}/> Past Submissions</h3>
+                                {submissions.length === 0 ? (
+                                    <p className="text-sm text-slate-400 italic">No exams submitted yet.</p>
+                                ) : (
+                                    <ul className="space-y-2 max-h-52 overflow-y-auto pr-2">
+                                        {submissions.slice(0, 5).map(sub => (
+                                            <li key={sub.id} className="text-sm p-2 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
+                                                <span>{sub.cluster} ({sub.studentName})</span>
+                                                <span className={`font-bold ${sub.score >= 70 ? 'text-green-600' : 'text-red-600'}`}>{sub.score}%</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            );
+        }
+
+        // --- BLUEPRINTS TAB ---
+        function BlueprintsTab({ blueprints, setBlueprints, allEvents }) {
+            // FIXED: Initial state to use the new, fully named key
+            const [editingCluster, setEditingCluster] = useState("Business Management and Administration");
+            // NEW STATE: To filter by level (DLC, SLC, ICDC)
+            const [editingLevel, setEditingLevel] = useState('ICDC'); 
+
+            // Available levels for the dropdown
+            const levels = ['DLC', 'SLC', 'ICDC'];
+            
+            const handleUpdate = (cat, val) => {
+                const numVal = parseInt(val) || 0;
+                setBlueprints(prev => ({
+                    ...prev, 
+                    [editingCluster]: { 
+                        ...prev[editingCluster], 
+                        [cat]: {
+                            ...prev[editingCluster][cat], // Keep existing level counts
+                            [editingLevel]: Math.max(0, numVal) // Update only the current level
+                        }
+                    }
+                }));
+            };
+            
+            const currentBlueprintCluster = blueprints[editingCluster];
+            const currentLevelBlueprint = Object.fromEntries(
+                Object.entries(currentBlueprintCluster)
+                    .map(([iaCode, levelCounts]) => [iaCode, levelCounts[editingLevel]])
+            );
+            
+            const totalQuestions = Object.values(currentLevelBlueprint).reduce((a, b) => a + b, 0);
+
+            return (
+                <div className="p-6 h-full flex flex-col">
+                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2 mb-4"><Settings size={24}/> Exam Blueprints Editor</h2>
+                    
+                    <div className="flex flex-col md:flex-row gap-4 mb-6 border-b pb-4">
+                        <div className="flex flex-col">
+                            <label className="text-xs font-bold text-slate-500 mb-1">Career Cluster</label>
+                            <select value={editingCluster} onChange={(e) => setEditingCluster(e.target.value)} className="p-2 border rounded-lg text-sm bg-blue-50 text-blue-700 font-bold">
+                                {/* Ensure the dropdown lists the correct keys */}
+                                {Object.keys(blueprints).map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                        </div>
+                        
+                        <div className="flex flex-col">
+                            <label className="text-xs font-bold text-slate-500 mb-1">Exam Level</label>
+                            <select value={editingLevel} onChange={(e) => setEditingLevel(e.target.value)} className="p-2 border rounded-lg text-sm bg-purple-50 text-purple-700 font-bold">
+                                {/* Renamed Display text: District -> DLC, Association -> SLC */}
+                                {levels.map(l => <option key={l} value={l}>{l} {l === 'SLC' ? '(Association)' : ''}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex justify-between items-center">
+                         <div>
+                            <p className="text-sm font-medium text-blue-800">Total Questions (Test Length):</p>
+                            <span className="text-3xl font-bold text-blue-600">{totalQuestions}</span>
+                        </div>
+                        <div className="text-sm text-blue-700">
+                            <p>Associated Events:</p>
+                            <p className="font-bold break-words">{DECA_EVENTS[editingCluster]?.join(', ') || 'N/A'}</p>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-auto pr-2">
+                        <p className="text-sm text-slate-600 mb-4 font-semibold">Number of questions per Instructional Area for <span className='text-purple-600'>{editingLevel}</span>:</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {Object.keys(currentBlueprintCluster).sort().map(code => (
+                                <div key={code} className={`flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm ${currentLevelBlueprint[code] === 0 ? 'opacity-60 bg-slate-50' : 'hover:border-blue-400'}`}>
+                                    <div className="flex flex-col overflow-auto break-words"><span className="font-medium text-slate-700 text-base">{INSTRUCTIONAL_AREAS[code] || code}</span><span className="text-xs text-slate-400 font-mono">{code}</span></div>
+                                    <div className="items-center gap-2 flex-shrink-0">
+                                        <input 
+                                            type="number" 
+                                            value={currentLevelBlueprint[code]} 
+                                            onChange={(e) => handleUpdate(code, e.target.value)} 
+                                            className="w-16 p-2 text-right border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
+                                            min="0"
+                                        />
+                                        <span className="text-slate-500"></span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // --- QUESTION BANK TAB ---
+        
+        function QuestionBankTab({ questions, onAddQuestions, onDeleteQuestion, onDeleteAll, onEditQuestion, isAdmin }) {
+            const [mode, setMode] = useState('list'); 
+            const [viewFormat, setViewFormat] = useState('list');
+            const [importText, setImportText] = useState("");
+            const fileInputRef = useRef(null);
+            const [notification, setNotification] = useState(null);
+            const [selectedQuestion, setSelectedQuestion] = useState(null);
+            const [searchTerm, setSearchTerm] = useState("");
+            const [filterCategory, setFilterCategory] = useState("ALL");
+            const [importCategory, setImportCategory] = useState("SM");
+            const [aiCategory, setAiCategory] = useState("BL");
+            const [aiCount, setAiCount] = useState(5);
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+            const [deleteConfirmText, setDeleteConfirmText] = useState("");
+            
+            // Notification handler
+            useEffect(() => {
+                if (notification) {
+                    const timer = setTimeout(() => setNotification(null), 3000);
+                    return () => clearTimeout(timer);
+                }
+            }, [notification]);
+
+            // Question counts for visualization
+            const categoryCounts = useMemo(() => {
+                const counts = {};
+                Object.keys(INSTRUCTIONAL_AREAS).forEach(key => counts[key] = 0);
+                questions.forEach(q => {
+                    if (q.category !== undefined && counts[q.category] !== undefined) counts[q.category]++;
+                    else {
+                        if (!counts['Other']) counts['Other'] = 0;
+                        counts['Other']++;
+                    }
+                });
+                return counts;
+            }, [questions]);
+
+            // Helper to load external JS for ZIP processing
+            const loadJSZip = () => {
+                return new Promise((resolve, reject) => {
+                    if (window.JSZip) { resolve(window.JSZip); return; }
+                    const script = document.createElement('script');
+                    script.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+                    script.onload = () => resolve(window.JSZip);
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            };
+
+            // Unified handler for text/file import (from user's previous code)
+            const processImportText = async (text) => {
+                const newQuestions = [];
+                const trimmedText = text.trim();
+                
+                // Simple JSON array import
+                if (trimmedText.startsWith("[") && trimmedText.endsWith("]")) {
+                    try {
+                        const jsonData = cleanAndParseJSON(trimmedText);
+                        if (Array.isArray(jsonData)) newQuestions.push(...jsonData);
+                    } catch(e) { setNotification({ type: 'error', msg: "Invalid JSON format." }); return; }
+                } 
+                // Blackboard/XML import (basic heuristic check)
+                else if (trimmedText.startsWith("<?xml") || trimmedText.includes("<POOL>")) {
+                    try {
+                        const parser = new DOMParser();
+                        const xmlDoc = parser.parseFromString(text, "text/xml");
+                        const qNodes = xmlDoc.getElementsByTagName("QUESTION");
+                        Array.from(qNodes).forEach(qNode => {
+                            const qTextNode = qNode.querySelector('BODY TEXT') || qNode.querySelector('BODY');
+                            const aNodes = qNode.querySelectorAll('ANSWER');
+                            
+                            if (qTextNode && aNodes.length >= 2) {
+                                const qText = qTextNode.textContent.replace(/<[^>]*>/g, "").trim();
+                                const options = Array.from(aNodes).map(a => a.textContent.replace(/<[^>]*>/g, "").trim()).filter(t => t);
+                                
+                                if (qText && options.length >= 2) {
+                                     newQuestions.push({
+                                        cluster: "Imported",
+                                        category: importCategory,
+                                        pi: "Imported from Blackboard/Zip",
+                                        question: qText,
+                                        options: options.slice(0,4),
+                                        answer: "A", 
+                                        rationale: "Imported from file."
+                                    });
+                                }
+                            }
+                        });
+                    } catch(e) { setNotification({ type: 'error', msg: "Failed to parse XML/Blackboard format." }); return; }
+                } 
+                // Simple Text/PDF paste
+                else {
+                    const lines = text.split('\n');
+                    let currentQ = {};
+                    lines.forEach(line => {
+                        line = line.trim();
+                        if(!line) return;
+                        const qStart = line.match(/^(\d+)\.\s+(.*)/);
+                        const optStart = line.match(/^([A-D])\.\s+(.*)/);
+                        
+                        if (qStart) {
+                            if (currentQ.question && currentQ.options && currentQ.options.length >= 2) {
+                                newQuestions.push(currentQ);
+                            }
+                            currentQ = { cluster: "Imported", category: importCategory, question: qStart[2], options: [], answer: "A", rationale: "Text import (Check Answer/PI)" };
+                        } else if (optStart && currentQ.question) {
+                            currentQ.options.push(optStart[2]);
+                        }
+                    });
+                    if (currentQ.question && currentQ.options && currentQ.options.length >= 2) {
+                        newQuestions.push(currentQ);
+                    }
+                }
+
+                if (newQuestions.length > 0) {
+                    await onAddQuestions(newQuestions);
+                    setNotification({ type: 'success', msg: `Successfully imported ${newQuestions.length} questions.` });
+                    setImportText("");
+                    setMode('list');
+                } else {
+                    setNotification({ type: 'error', msg: "No valid questions found in the provided text/file." });
+                }
+            };
+
+            const handleFileUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                if (file.name.endsWith('.zip')) {
+                    try {
+                        const JSZip = await loadJSZip();
+                        const zip = await new JSZip().loadAsync(file);
+                        const datFileName = Object.keys(zip.files).find(name => name.endsWith('.dat') && name.includes('res'));
+                        if (datFileName) {
+                            const text = await zip.file(datFileName).async("string");
+                            setImportText(`[Preview of ZIP content] ${text.substring(0, 500)}...`); 
+                            processImportText(text);
+                        } else {
+                            setNotification({ type: 'error', msg: "No .dat file found in ZIP." });
+                        }
+                    } catch (err) {
+                        setNotification({ type: 'error', msg: "Failed to read ZIP file." });
+                    }
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        const text = evt.target.result;
+                        setImportText(`[Preview of File] ${text.substring(0, 500)}...`); 
+                        processImportText(text);
+                    };
+                    reader.readAsText(file);
+                }
+            };
+
+            const handleDownloadBank = () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(questions.map(q => ({...q, id: undefined})), null, 2));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", "deca_question_bank_backup.json");
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            };
+
+            const handleAIGenerate = async () => {
+                setIsGenerating(true);
+                try {
+                    const prompt = `
+                        Generate ${aiCount} DECA-style multiple-choice questions. 
+                        Instructional Area: ${INSTRUCTIONAL_AREAS[aiCategory]} (${aiCategory}). 
+                        Ensure each question includes a clear rationale.
+                        Format: JSON array ONLY: [{"question":"...","options":["A.","B.","C.","D."],"answer":"A","rationale":"..."}]
+                        Do not include markdown or extra text outside the JSON array.
+                    `;
+                    const text = await fetchGeminiContent(prompt);
+                    const parsed = cleanAndParseJSON(text);
+                    
+                    const generated = parsed.map(q => ({
+                        cluster: "AI Generated", category: aiCategory, pi: "Ad-hoc AI Generation",
+                        question: q.question, options: q.options, answer: q.answer, rationale: q.rationale || "No rationale provided."
+                    }));
+                    
+                    await onAddQuestions(generated);
+                    setNotification({ type: 'success', msg: `Generated and Saved ${generated.length} questions for ${aiCategory}.` });
+                    setMode('list');
+                } catch(e) { 
+                    console.error(e); 
+                    setNotification({ type: 'error', msg: "AI Generation failed. Check API Key/Connection." });
+                } finally { 
+                    setIsGenerating(false); 
+                }
+            };
+
+            const filteredQuestions = questions.filter(q => {
+                const matchesSearch = q.question.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchesCategory = filterCategory === "ALL" || q.category === filterCategory;
+                return matchesSearch && matchesCategory;
+            });
+            
+            // --- Editing Logic ---
+            const startEdit = (q) => {
+                setSelectedQuestion(null); // Close view modal if open
+                setMode('edit');
+                // The form fields should be pre-filled based on 'q'
+                setNotification({ type: 'info', msg: 'Editing functionality is placeholder in this view.' });
+            };
+
+            return (
+                <div className="p-6 h-full flex flex-col relative">
+                    {/* Notifications */}
+                    {notification && (
+                        <div className={`absolute top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 font-bold transition-all ${notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                        {/* FIXED ICON: Replaced SquareCheckBig with CheckSquare */}
+                        {notification.type === 'success' ? <CheckSquare size={18}/> : <AlertCircle size={18}/>} {notification.msg}
+                        </div>
+                    )}
+
+                    {/* Delete Confirmation Modal */}
+                    {showDeleteConfirm && (
+                        <div className="absolute inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+                            <div className="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full border border-red-100">
+                                <h3 className="text-xl font-bold text-red-600 mb-2">Danger Zone: Delete All</h3>
+                                <p className="text-slate-600 mb-4 text-sm">Type "DELETE" to confirm clearing {questions.length} questions from the cloud database. THIS ACTION IS IRREVERSIBLE.</p>
+                                <input type="text" value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} className="w-full p-2 border mb-4 rounded"/>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2 border border-slate-300 rounded hover:bg-slate-50">Cancel</button>
+                                    <button onClick={() => { if(deleteConfirmText === "DELETE") { onDeleteAll(); setShowDeleteConfirm(false); } }} disabled={deleteConfirmText !== "DELETE"} className="flex-1 py-2 bg-red-600 text-white rounded font-bold disabled:opacity-50">Delete All</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Question View/Edit Modal (Combined) */}
+                    {selectedQuestion && (
+                        <div className="absolute inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4 backdrop-blur-sm">
+                            <div className="bg-white p-8 rounded-xl shadow-2xl max-w-3xl w-full border border-slate-200 flex flex-col max-h-[90vh]">
+                                <div className="flex justify-between items-start mb-4 border-b pb-3">
+                                    <div>
+                                        <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded mb-2">{selectedQuestion.category} - {selectedQuestion.cluster}</span>
+                                        <h3 className="text-lg font-bold text-slate-900">{selectedQuestion.pi || "General Question"}</h3>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {isAdmin && (
+                                            <button onClick={() => { setSelectedQuestion(null); startEdit(selectedQuestion); }} className="text-blue-500 hover:bg-blue-50 p-2 rounded flex items-center gap-1 text-sm"><Edit size={16}/> Edit</button>
+                                        )}
+                                        <button onClick={() => setSelectedQuestion(null)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full"><X size={20}/></button>
+                                    </div>
+                                </div>
+                                <div className="overflow-y-auto flex-1 pr-2 break-words">
+                                    <p className="text-lg text-slate-800 mb-6 font-medium">{selectedQuestion.question}</p>
+                                    <div className="space-y-2 mb-6">
+                                        {selectedQuestion.options.map((opt, i) => {
+                                            const letter = ['A','B','C','D'][i];
+                                            const isCorrect = selectedQuestion.answer === letter;
+                                            return (
+                                                <div key={i} className={`p-3 rounded border flex items-center gap-3 ${isCorrect ? 'bg-green-50 border-green-500 text-green-900' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                                                    <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${isCorrect ? 'bg-green-200' : 'bg-slate-200'}`}>{letter}</span>
+                                                    <span className="text-base break-words">{opt}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                        <h4 className="font-bold text-blue-800 text-sm mb-1">Rationale</h4>
+                                        <p className="text-blue-700 text-sm">{selectedQuestion.rationale}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* --- HEADER CONTROLS --- */}
+                    <div className="flex justify-between items-center mb-6 border-b pb-4">
+                        <h2 className="text-2xl font-bold text-slate-800">Question Bank ({questions.length} Total)</h2>
+                        <div className="flex gap-2">
+                            {questions.length === 0 && (
+                                <button onClick={() => onAddQuestions(INITIAL_QUESTIONS)} className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-600 border border-green-200 rounded hover:bg-green-100"><Database size={16}/> Seed Sample</button>
+                            )}
+                            {isAdmin && (
+                                <>
+                                    <button onClick={handleDownloadBank} className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded hover:bg-blue-100" title="Save Bank to JSON File"><Download size={16}/><span className="hidden md:inline">Backup</span></button>
+                                    <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100" title="Delete All Questions"><Trash2 size={16}/></button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* --- MODE SWITCHER & CONTENT --- */}
+                    <div className="flex-shrink-0 mb-4 flex gap-4">
+                        <button onClick={() => setMode('list')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-colors ${mode === 'list' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}><List size={16}/> View List</button>
+                        <button onClick={() => setMode('import')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-colors ${mode === 'import' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}><Plus size={16}/> Import Text/File</button>
+                        <button onClick={() => setMode('ai')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-colors ${mode === 'ai' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}><Sparkles size={16}/> AI Generate</button>
+                    </div>
+
+                    {mode === 'import' && (
+                        <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-2">
+                            <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg text-sm text-amber-800">
+                                <strong>Import Options:</strong> Supports JSON arrays, raw text paste (like from PDFs), and Blackboard/XML ZIP files.
+                            </div>
+                            <div className="bg-white p-4 border rounded-lg shadow-sm">
+                                <label className="block text-xs font-bold text-slate-500 mb-1">Default Category for Imported Questions (e.g., EC if not specified)</label>
+                                <select value={importCategory} onChange={e => setImportCategory(e.target.value)} className="w-full p-2 border rounded">{Object.keys(INSTRUCTIONAL_AREAS).map(k => <option key={k} value={k}>{k}: {INSTRUCTIONAL_AREAS[k]}</option>)}</select>
+                            </div>
+                            <div className="flex gap-2">
+                                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".zip,.txt,.xml,.json"/>
+                                <button onClick={() => fileInputRef.current.click()} className="px-4 py-2 bg-blue-100 text-blue-700 rounded border border-blue-200 hover:bg-blue-200 flex items-center gap-2"><FileUp size={18}/> Upload File</button>
+                            </div>
+                            <textarea className="flex-1 w-full p-4 border rounded-lg font-mono text-xs shadow-inner" placeholder="Or paste structured JSON or plain text here..." value={importText} onChange={e => setImportText(e.target.value)}/>
+                            <button onClick={() => processImportText(importText)} className="w-full py-3 bg-slate-800 text-white rounded font-bold transition-transform active:scale-95">Process Text</button>
+                        </div>
+                    )}
+
+                    {mode === 'ai' && (
+                        <div className="flex-1 flex flex-col items-center justify-center bg-purple-50 p-8 rounded-lg overflow-y-auto">
+                            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md space-y-4">
+                                <h3 className="font-bold text-purple-800 flex items-center gap-2"><Sparkles size={18}/> Quick AI Add Questions</h3>
+                                <p className='text-sm text-slate-600'>Select the Instructional Area for targeted question generation:</p>
+                                <select value={aiCategory} onChange={e => setAiCategory(e.target.value)} className="w-full p-3 border rounded-lg">{Object.keys(INSTRUCTIONAL_AREAS).map(k => <option key={k} value={k}>{k}: {INSTRUCTIONAL_AREAS[k]}</option>)}</select>
+                                <select value={aiCount} onChange={e => setAiCount(Number(e.target.value))} className="w-full p-3 border rounded-lg"><option value="1">1 Question</option><option value="5">5 Questions</option><option value="10">10 Questions</option></select>
+                                <button onClick={handleAIGenerate} disabled={isGenerating} className="w-full py-3 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-transform active:scale-95 flex items-center justify-center gap-2">
+                                    {isGenerating ? <Loader2 size={18} className="animate-spin"/> : <Zap size={18}/>}
+                                    {isGenerating ? "Generating..." : "Generate and Save to Bank"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {mode === 'list' && (
+                        <div className="flex-1 overflow-y-auto pr-2">
+                            {/* Question Counts Dashboard - PI distribution overview */}
+                            {/* ADJUSTED GRID LAYOUT AND TEXT WRAPPING */}
+                            <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                {Object.entries(INSTRUCTIONAL_AREAS).map(([code, name]) => {
+                                    const count = categoryCounts[code] || 0;
+                                    let bgColor = "bg-slate-100 border-slate-200 hover:bg-slate-200";
+                                    let textColor = "text-slate-500";
+                                    
+                                    if (count > 0) {
+                                        bgColor = count < 5 ? "bg-amber-50 border-amber-200 hover:bg-amber-100" : "bg-green-50 border-green-200 hover:bg-green-100";
+                                        textColor = count < 5 ? "text-amber-700" : "text-green-700";
+                                    }
+                                    
+                                    if (filterCategory === code) {
+                                        bgColor = "bg-blue-100 border-blue-400 ring-2 ring-blue-500";
+                                        textColor = "text-blue-900";
+                                    }
+
+                                    return (
+                                        <div 
+                                            key={code} 
+                                            onClick={() => setFilterCategory(code === filterCategory ? "ALL" : code)}
+                                            className={`border rounded-lg p-2 flex flex-col items-center justify-center cursor-pointer transition-all shadow-sm ${bgColor}`}
+                                        >
+                                            <span className={`text-xl font-bold ${textColor}`}>{count}</span>
+                                            {/* Ensure full text of IA name is shown by wrapping */}
+                                            <span className="text-xs text-slate-500 font-medium text-center leading-tight break-words-strict">{INSTRUCTIONAL_AREAS[code]}</span>
+                                            <span className="text-xs text-slate-400 font-mono mt-0.5">{code}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="flex flex-col md:flex-row gap-2 mb-4 sticky top-0 bg-white pt-2 z-10 border-t border-b py-4">
+                                <input type="text" placeholder={`Search ${filteredQuestions.length} questions...`} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-1 p-2 border rounded"/>
+                                <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="p-2 border rounded w-full md:w-48"><option value="ALL">All Categories</option>{Object.keys(INSTRUCTIONAL_AREAS).map(k => <option key={k} value={k}>{k}: {INSTRUCTIONAL_AREAS[k]}</option>)}</select>
+                                <button onClick={() => setViewFormat(viewFormat === 'list' ? 'grid' : 'list')} className="p-2 border rounded bg-white hover:bg-slate-50 text-slate-600" title="Toggle View">
+                                    {viewFormat === 'list' ? <Grid size={20}/> : <List size={20}/>}
+                                </button>
+                            </div>
+                            
+                            {filteredQuestions.length === 0 ? (
+                                <p className="text-center text-slate-400 p-10">No questions match the current filter/search criteria.</p>
+                            ) : viewFormat === 'list' ? (
+                                <table className="w-full text-left">
+                                    <thead><tr className="bg-slate-100 text-sm"><th className="p-3">Cat</th><th className="p-3">Question/PI</th><th className="p-3 text-right">Action</th></tr></thead>
+                                    <tbody>
+                                    {filteredQuestions.map(q => (
+                                        <tr key={q.id} className="border-b text-sm hover:bg-slate-50">
+                                            <td className="p-3 font-bold text-blue-600">{q.category}</td>
+                                            <td className="p-3 max-w-xs cursor-pointer break-words" onClick={() => setSelectedQuestion(q)}>
+                                                <p className='truncate'>{q.question}</p>
+                                                <p className='text-xs text-slate-400 italic truncate'>{q.pi}</p>
+                                            </td>
+                                            <td className="p-3 text-right flex justify-end items-center gap-2">
+                                                <button onClick={() => setSelectedQuestion(q)} className="text-slate-400 hover:text-blue-600" title="View Details"><Eye size={16}/></button>
+                                                {isAdmin && <button onClick={() => handleDeleteQuestion(q.id)} className="text-red-500 hover:text-red-700" title="Delete Question"><Trash2 size={16}/></button>}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-2">
+                                    {filteredQuestions.map(q => (
+                                        <div key={q.id} className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-lg transition-shadow cursor-pointer relative group" onClick={() => setSelectedQuestion(q)}>
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded">{q.category}</span>
+                                                {isAdmin && (
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteQuestion(q.id); }} 
+                                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <Trash2 size={16}/>
+                                                </button>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-slate-800 line-clamp-3 mb-2 font-medium">{q.question}</p>
+                                            <p className="text-xs text-slate-400 italic truncate">{q.pi || "No PI assigned"}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // --- ADMIN DASHBOARD ---
+        function AdminDashboard({ submissions, setAdminMode }) {
+            const [filterDate, setFilterDate] = useState('all');
+
+            const filteredSubs = submissions.filter(sub => {
+                if (filterDate === 'today') {
+                    return new Date(sub.date).toDateString() === new Date().toDateString();
+                }
+                return true;
+            }).sort((a,b) => new Date(b.date) - new Date(a.date));
+
+            return (
+                <div className="p-8 h-full flex flex-col">
+                    <h2 className="text-2xl font-bold mb-6 text-slate-800 flex items-center gap-2"><Lock className="text-red-600" size={24}/> Admin Portal</h2>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <button onClick={() => setAdminMode('questions')} className="bg-blue-600 text-white p-4 rounded-xl shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-between">
+                            <span className="font-bold text-lg">Manage Questions</span> <Upload size={24}/>
+                        </button>
+                         <button onClick={() => setAdminMode('blueprints')} className="bg-purple-600 text-white p-4 rounded-xl shadow-lg hover:bg-purple-700 transition-colors flex items-center justify-between">
+                            <span className="font-bold text-lg">Edit Blueprints</span> <Settings size={24}/>
+                        </button>
+                        <button onClick={() => setAdminMode('config')} className="bg-slate-700 text-white p-4 rounded-xl shadow-lg hover:bg-slate-800 transition-colors flex items-center justify-between">
+                            <span className="font-bold text-lg">View Configuration</span> <Database size={24}/>
+                        </button>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex-1 overflow-auto">
+                        <div className="flex justify-between items-center mb-4 border-b pb-3">
+                            <h3 className="font-bold text-lg">Student Submissions ({submissions.length} Total)</h3>
+                            <select value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="p-2 border rounded">
+                                <option value="all">All Time</option>
+                                <option value="today">Today Only</option>
+                            </select>
+                        </div>
+                        
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-50 text-sm font-bold text-slate-600 border-b">
+                                <tr>
+                                    <th className="p-3">Date</th>
+                                    <th className="p-3">Student Name</th>
+                                    <th className="p-3">Cluster</th>
+                                    <th className="p-3">Score</th>
+                                </tr>
+                            </thead>
+                            <tbody className="text-sm">
+                                {filteredSubs.length === 0 ? <tr><td colSpan="4" className="p-6 text-center text-slate-400">No submissions found.</td></tr> : 
+                                 filteredSubs.map((sub) => (
+                                    <tr key={sub.id} className="border-b hover:bg-slate-50">
+                                        <td className="p-3 text-xs">{new Date(sub.date).toLocaleDateString()}</td>
+                                        <td className="p-3 font-medium text-slate-800">{sub.studentName}</td>
+                                        <td className="p-3 text-slate-600">{sub.cluster}</td>
+                                        <td className="p-3 font-bold" style={{ color: sub.score >= 70 ? '#28a745' : '#dc3545' }}>{sub.score}%</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        }
+        
+        // --- CONFIG VIEW ---
+        function ConfigView({ config }) {
+            const firebaseStatus = globalInitError ? `Failed: ${globalInitError}` : (useCloud ? 'Active (Cloud Firestore)' : 'Offline/Local Storage');
+            
+            return (
+                 <div className="p-8 h-full flex flex-col">
+                    <h2 className="text-2xl font-bold mb-6 text-slate-800 flex items-center gap-2"><Database size={24}/> Configuration & Status</h2>
+
+                    <div className="space-y-6">
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                            <h3 className="text-xl font-bold text-blue-600 mb-2">Database Status</h3>
+                            <p className="text-sm">Status: <span className={`font-bold ${useCloud ? 'text-green-600' : 'text-amber-600'}`}>{firebaseStatus}</span></p>
+                            <p className='text-sm'>App ID: <span className='font-mono text-xs'>{config.APP_ID}</span></p>
+                            <p className='text-sm mt-3'>Firebase Project ID: <span className='font-mono text-xs'>{config.FIREBASE_CONFIG.projectId}</span></p>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                            <h3 className="text-xl font-bold text-purple-600 mb-2">AI Configuration</h3>
+                            <p className="text-sm">Gemini Model: <span className='font-mono text-sm'>{config.GEMINI_MODEL}</span></p>
+                            <p className="text-sm">API Key: <span className='font-mono text-sm text-green-600'>SET (Custom Key)</span></p>
+                        </div>
+
+                         <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                            <h3 className="text-xl font-bold text-red-600 mb-2">Admin Credentials</h3>
+                            <p className="text-sm">Admin Password: <span className='font-mono text-sm font-bold'>{config.ADMIN_PASSWORD}</span></p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- MAIN APP COMPONENT ---
+
+        function DECATestGenerator() {
+            const [authState, setAuthState] = useState({ user: null, loading: true, userId: null, authChecked: false });
+            const [activeTab, setActiveTab] = useState('generate'); 
+            const [questions, setQuestions] = useState([]); 
+            const [submissions, setSubmissions] = useState([]);
+            // FIXED: Using the fully renamed key for initial state
+            const [blueprints, setBlueprints] = useState(DEFAULT_BLUEPRINTS);
+            const [storageMode, setStorageMode] = useState(useCloud ? 'cloud' : 'local');
+            const [isAdmin, setIsAdmin] = useState(false);
+            
+            // Exam State
+            // FIXED: Using the fully renamed key for initial state
+            const [selectedCluster, setSelectedCluster] = useState("Business Management and Administration");
+            const [examLength, setExamLength] = useState(100);
+            const [generatedExam, setGeneratedExam] = useState(null);
+            const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+            const [userAnswers, setUserAnswers] = useState({});
+            const [examMode, setExamMode] = useState('taking');
+            const [studentName, setStudentName] = useState(localStorage.getItem('studentName') || "");
+
+
+            // 1. Authentication and Data Listeners
+            useEffect(() => {
+                if (useCloud && auth && db) {
+                    // Auth Handler
+                    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+                        let finalUser = user;
+                        if (!user) {
+                             // Try to sign in with Canvas token first (will fail due to project mismatch)
+                            try {
+                                if (typeof __initial_auth_token !== 'undefined') {
+                                    // This is the line generating the 'auth/custom-token-mismatch' error, 
+                                    // but we must attempt it if the token is present.
+                                    finalUser = await signInWithCustomToken(auth, __initial_auth_token).then(c => c.user);
+                                }
+                            } catch(e) {
+                                console.error("Initial sign-in (custom token) failed:", e);
+                            }
+
+                             // Fallback to Anonymous Sign-in if no user is signed in yet.
+                            if (!finalUser) {
+                                try {
+                                    finalUser = await signInAnonymously(auth).then(c => c.user);
+                                } catch(e) {
+                                    console.error("Anonymous sign-in failed:", e);
+                                    globalInitError = "Authentication failed. Check security rules and console logs.";
+                                }
+                            }
+                        }
+                        
+                        setAuthState({ user: finalUser, loading: false, userId: finalUser?.uid, authChecked: true });
+                    });
+                    
+                    // Firestore Listeners (Data operations must run AFTER authChecked is true)
+                    
+                    // We handle the listeners within the next useEffect which is conditional on authChecked.
+
+                    return () => {
+                        unsubscribeAuth();
+                        // Note: Unsubscribing Firestore listeners here is redundant since they are defined outside this closure.
+                        // We rely on the subsequent useEffect's cleanup function to handle them.
+                    };
+                } else {
+                    // Offline Mode: Load Local Storage Data
+                    const localQ = localStorage.getItem('deca_questions');
+                    if (localQ) setQuestions(JSON.parse(localQ)); else setQuestions(INITIAL_QUESTIONS);
+
+                    const localS = localStorage.getItem('deca_submissions');
+                    if (localS) setSubmissions(JSON.parse(localS));
+
+                    setAuthState(prev => ({ ...prev, loading: false, authChecked: true }));
+                }
+                
+                // Load local blueprints regardless of connection state (can be edited by Admin)
+                const localB = localStorage.getItem('deca_blueprints');
+                if (localB) setBlueprints(JSON.parse(localB));
+
+            }, [useCloud]);
+
+            // 2. Data Listeners (Runs only after Auth is confirmed)
+            useEffect(() => {
+                 if (useCloud && authState.authChecked && authState.userId) {
+                    let unsubscribers = [];
+
+                    try {
+                        // Firestore Listener for Questions (Public Data)
+                        const qRef = collection(db, 'artifacts', APP_CONFIG.APP_ID, 'public', 'data', 'questions');
+                        const unsubscribeQuestions = onSnapshot(qRef, (snapshot) => {
+                            const loadedQuestions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            setQuestions(loadedQuestions);
+                        }, (error) => {
+                             // This catches the 'permission-denied' error for questions
+                            console.error("Error subscribing to questions:", error);
+                        });
+                        unsubscribers.push(unsubscribeQuestions);
+
+                        // Firestore Listener for Submissions (Public Data)
+                        const sRef = collection(db, 'artifacts', APP_CONFIG.APP_ID, 'public', 'data', 'submissions');
+                        const unsubscribeSubmissions = onSnapshot(query(sRef), (snapshot) => {
+                            const subs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            setSubmissions(subs);
+                        }, (error) => {
+                             // This catches the 'permission-denied' error for submissions
+                             console.error("Error subscribing to submissions:", error);
+                        });
+                        unsubscribers.push(unsubscribeSubmissions);
+                    } catch (e) {
+                        console.error("Failed to set up Firestore listeners:", e);
+                    }
+
+                    return () => {
+                        unsubscribers.forEach(unsub => unsub());
+                    };
+                }
+            }, [authState.authChecked, authState.userId, useCloud]);
+
+
+            // 3. Local Storage Sync (for offline/local mode)
+            useEffect(() => {
+                localStorage.setItem('studentName', studentName);
+                if (storageMode === 'local') {
+                    localStorage.setItem('deca_questions', JSON.stringify(questions));
+                    localStorage.setItem('deca_submissions', JSON.stringify(submissions));
+                }
+                localStorage.setItem('deca_blueprints', JSON.stringify(blueprints));
+            }, [questions, submissions, blueprints, storageMode, studentName]);
+
+            // HANDLERS
+            const handleAddQuestions = async (newQuestions) => {
+                if (storageMode === 'cloud') {
+                    const qRef = collection(db, 'artifacts', APP_CONFIG.APP_ID, 'public', 'data', 'questions');
+                    const batchSize = 450; 
+                    for (let i = 0; i < newQuestions.length; i += batchSize) {
+                        const chunk = newQuestions.slice(i, i + batchSize);
+                        const batch = writeBatch(db);
+                        chunk.forEach(q => {
+                            const newDocRef = doc(qRef); 
+                            const { id, ...qData } = q;
+                            // Basic sanitization for Firestore
+                            const cleanData = {};
+                            Object.keys(qData).forEach(key => cleanData[key] = qData[key] === undefined ? "N/A" : qData[key]);
+                            cleanData.options = (cleanData.options || []).map(o => o ?? ""); // Ensure options are cleaned
+                            batch.set(newDocRef, cleanData);
+                        });
+                        await batch.commit();
+                    }
+                } else {
+                    const newWithIds = newQuestions.map(q => ({...q, id: `local-${Date.now()}-${Math.random()}`}));
+                    setQuestions(prev => [...prev, ...newWithIds]);
+                }
+            };
+
+            const handleDeleteQuestion = async (id) => {
+                if (!isAdmin) return;
+                if (storageMode === 'cloud') {
+                    await deleteDoc(doc(db, 'artifacts', APP_CONFIG.APP_ID, 'public', 'data', 'questions', id));
+                } else {
+                    setQuestions(prev => prev.filter(q => q.id !== id));
+                }
+            };
+
+            const onDeleteAll = async () => {
+                 if (!isAdmin) return;
+                if (storageMode === 'cloud') {
+                    const qRef = collection(db, 'artifacts', APP_CONFIG.APP_ID, 'public', 'data', 'questions');
+                    // Due to size limit of batches, we read and delete in chunks
+                    // Using getDocs in the function scope is okay since we're deleting immediately after
+                    const docsToDelete = await getDocs(query(qRef));
+                    const batchSize = 450;
+                    for (let i = 0; i < docsToDelete.docs.length; i += batchSize) {
+                        const chunk = docsToDelete.docs.slice(i, i + batchSize);
+                        const batch = writeBatch(db);
+                        chunk.forEach(q => { batch.delete(q.ref); });
+                        await batch.commit();
+                    }
+                } else {
+                    setQuestions([]);
+                }
+            };
+            
+            // Placeholder for Edit Question
+            const handleEditQuestion = (updatedQ) => {
+                // In a full implementation, this would perform a Firestore update
+                console.log("Edit Question placeholder executed for:", updatedQ);
+            }
+
+            const handleSaveSubmission = async (subData) => {
+                // Ensure submissions are saved globally/publicly for admin review
+                const collectionPath = `artifacts/${APP_CONFIG.APP_ID}/public/data/submissions`;
+                if (storageMode === 'cloud') {
+                    await addDoc(collection(db, collectionPath), subData);
+                } else {
+                    setSubmissions(prev => [{...subData, id: `local-sub-${Date.now()}`}, ...prev]);
+                }
+            };
+
+            const handleAdminLogin = () => {
+                const password = prompt("Enter Admin Password:");
+                if (password === APP_CONFIG.ADMIN_PASSWORD) {
+                    setIsAdmin(true);
+                    setActiveTab('admin');
+                } else {
+                    alert("Incorrect Password");
+                }
+            };
+
+            const handleAdminLogout = () => {
+                setIsAdmin(false);
+                setActiveTab('generate');
+            };
+
+            const handleSetAdminMode = (mode) => {
+                if (mode === 'questions' || mode === 'blueprints' || mode === 'config') {
+                    setActiveTab(mode);
+                }
+            };
+
+            const renderContent = () => {
+                 if (!authState.authChecked) {
+                    return (
+                        <div className="flex justify-center items-center h-full p-8">
+                            <Loader2 className="animate-spin text-blue-600 mr-2" size={32} />
+                            <p className="text-xl text-slate-600">Initializing DECA Platform...</p>
+                        </div>
+                    );
+                }
+                
+                switch (activeTab) {
+                    case 'blueprints': return <BlueprintsTab blueprints={blueprints} setBlueprints={setBlueprints} />;
+                    case 'questions': return (
+                        <QuestionBankTab 
+                            questions={questions} 
+                            onAddQuestions={handleAddQuestions}
+                            onDeleteQuestion={handleDeleteQuestion}
+                            onDeleteAll={onDeleteAll}
+                            onEditQuestion={handleEditQuestion}
+                            isAdmin={isAdmin}
+                        />
+                    );
+                    case 'admin': return <AdminDashboard submissions={submissions} setAdminMode={handleSetAdminMode}/>;
+                    case 'config': return <ConfigView config={APP_CONFIG} />;
+                    case 'generate':
+                    default: return (
+                        <GeneratorTab 
+                            clusters={Object.keys(DECA_EVENTS)} 
+                            selectedCluster={selectedCluster} 
+                            setSelectedCluster={setSelectedCluster}
+                            examLength={examLength}
+                            setExamLength={setExamLength}
+                            questions={questions}
+                            onAddQuestions={handleAddQuestions}
+                            submissions={submissions}
+                            blueprints={blueprints}
+                            storageMode={storageMode}
+                            errorMsg={globalInitError}
+                            onStartExam={(exam, name) => {
+                                setGeneratedExam(exam);
+                                setStudentName(name);
+                                setExamMode('taking');
+                                setUserAnswers({});
+                                setCurrentQuestionIndex(0);
+                                setActiveTab('exam');
+                            }}
+                        />
+                    );
+                    case 'exam': return generatedExam ? (
+                        <ExamSession 
+                            exam={generatedExam} 
+                            mode={examMode} 
+                            setMode={setExamMode}
+                            userAnswers={userAnswers}
+                            setUserAnswers={setUserAnswers}
+                            currentIndex={currentQuestionIndex}
+                            setCurrentIndex={setCurrentIndex}
+                            studentName={studentName}
+                            onSaveSubmission={handleSaveSubmission}
+                            onExit={() => setActiveTab('generate')}
+                        />
+                    ) : <div className="p-8 text-center text-slate-500">No active exam session. Start one from the Generate Test tab.</div>;
+                }
+            };
+
+            // NEW: Horizontal Tab Navigation Component
+            const TabNavigation = () => (
+                <header className="bg-slate-900 text-white shadow-lg flex-shrink-0">
+                    <div className="main-content-container flex flex-col md:flex-row justify-between items-center py-3">
+                        <div className="flex items-center gap-2 mb-2 md:mb-0">
+                            <BarChart3 className="text-blue-400" size={24} />
+                            <h1 className="text-xl font-bold">DECA Prep Platform</h1>
+                        </div>
+                        <nav className="flex space-x-6">
+                            {[
+                                { id: 'generate', label: 'Generate Test', icon: Play, requiresAdmin: false },
+                                { id: 'blueprints', label: 'Blueprints', icon: Target, requiresAdmin: false },
+                                { id: 'questions', label: 'Question Bank', icon: Upload, requiresAdmin: true },
+                                { id: 'admin', label: 'Admin Console', icon: Lock, requiresAdmin: true }
+                            ].filter(item => !item.requiresAdmin || isAdmin).map(item => (
+                                <button
+                                    key={item.id}
+                                    disabled={activeTab === 'exam'}
+                                    onClick={() => setActiveTab(item.id)}
+                                    className={`flex items-center gap-2 px-3 py-1 text-sm font-medium rounded-lg transition-colors
+                                        ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}
+                                        ${activeTab === 'exam' ? 'opacity-50 cursor-not-allowed' : ''}
+                                    `}
+                                >
+                                    <item.icon size={16} />
+                                    {item.label}
+                                </button>
+                            ))}
+                        </nav>
+                        <div className="flex items-center space-x-3 pt-2 md:pt-0">
+                            <span className="text-xs text-slate-400">
+                                {isAdmin ? `ADMIN: ${authState.user?.uid.substring(0, 8)}...` : `User: ${authState.user?.uid.substring(0, 8)}...`}
+                            </span>
+                            <button 
+                                onClick={isAdmin ? handleAdminLogout : handleAdminLogin} 
+                                className="px-3 py-1 bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg hover:bg-slate-600 transition duration-150 flex items-center gap-1"
+                            >
+                                {isAdmin ? <LogOut size={14}/> : <Lock size={14}/>}
+                                {isAdmin ? "Logout" : "Admin Login"}
+                            </button>
+                        </div>
+                    </div>
+                </header>
+            );
+
+
+            return (
+                <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+                    {/* Render Top Tabs */}
+                    {activeTab !== 'exam' && <TabNavigation />}
+                    
+                    <main className="flex-1 overflow-y-auto w-full">
+                        <div className={`mx-auto bg-white shadow-sm border border-slate-200 rounded-xl min-h-full flex flex-col 
+                            ${activeTab !== 'exam' ? 'main-content-container mt-4 mb-4' : 'h-screen'}`
+                        }>
+                            {renderContent()}
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<DECATestGenerator />);
+    </script>
+</body>
+</html>
