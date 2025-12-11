@@ -270,7 +270,7 @@
                      <div className="p-8 text-center flex flex-col items-center justify-center h-full">
                         <AlertCircle size={48} className="text-red-500 mb-4"/>
                         <h2 className="text-2xl font-bold mb-3">Error: Exam Data Invalid or Missing</h2>
-                        <p className="text-slate-600">The exam could not be loaded. This might be due to a generation failure. Please try again from the "Generate Test" tab.</p>
+                        <p className="text-slate-600">The exam could not be loaded. Please try again from the "Generate Test" tab.</p>
                         <button onClick={onExit} className="mt-4 px-6 py-2 bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-2"><Home size={18}/> Back to Generator</button>
                     </div>
                 );
@@ -378,22 +378,10 @@
             };
 
             const handleCancel = () => {
-                if (window.confirm("Are you sure you want to cancel this session? All progress will be lost.")) {
+                if (confirm("Are you sure you want to cancel this session? All progress will be lost.")) {
                     onExit();
                 }
             };
-            
-            // Defensive Check: Ensure currentQ exists before rendering anything that depends on it
-            if (!currentQ) {
-                return (
-                     <div className="p-8 text-center flex flex-col items-center justify-center h-full">
-                        <AlertCircle size={48} className="text-red-500 mb-4"/>
-                        <h2 className="text-2xl font-bold mb-3">Error: Exam Data Missing or Invalid</h2>
-                        <p className="text-slate-600">Please return to the "Generate Test" tab to start a new exam.</p>
-                        <button onClick={onExit} className="mt-4 px-6 py-2 bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-2"><Home size={18}/> Back to Generator</button>
-                    </div>
-                );
-            }
 
             if (mode === 'results') {
                 const correctCount = exam.filter((q, i) => userAnswers[i] === q.answer).length;
@@ -474,15 +462,17 @@
                     {/* 1. Header (Fixed Height) */}
                     <div className="h-20 p-4 border-b flex justify-between items-center bg-slate-100 flex-shrink-0 z-10 sticky top-0">
                         <div className="flex flex-col">
-                            <span className="font-bold text-slate-700 text-lg">{currentQ.cluster} - {currentQ.category}</span>
+                            {/* Using optional chaining for safety */}
+                            <span className="font-bold text-slate-700 text-lg">{currentQ?.cluster} - {currentQ?.category}</span>
                             <span className="text-xs text-slate-500">Student: {studentName}</span>
                         </div>
                         <div className="flex items-center gap-4">
-                            {/* FIXED ICON: Added Clock icon */}
+                            {/* FIXED: Placeholder text is no longer commented out */}
                             <div className="flex items-center text-red-600 font-bold text-xl border-2 border-red-300 bg-red-50 p-2 rounded-lg">
                                 <Clock size={20} className="mr-2"/>
-                                <span>90:00</span> /* Placeholder for live timer implementation */
+                                <span>90:00</span>
                             </div>
+                            {/* FIXED: Used handleCancel defined in this scope */}
                             <button onClick={handleCancel} className="text-red-500 hover:bg-red-100 p-2 rounded-full transition-colors"><X size={24}/></button>
                         </div>
                     </div>
@@ -568,7 +558,7 @@
                             
                             {mode === 'taking' ? (
                                 <button 
-                                    onClick={() => setCurrentIndex(c => Math.min(exam.length - 1, c+1))} 
+                                    onClick={() => currentIndex === exam.length - 1 ? setShowReview(true) : setCurrentIndex(c => c+1)} 
                                     className="px-8 py-2 bg-blue-600 text-white rounded-r-lg font-bold hover:bg-blue-700 shadow-md transition-transform active:scale-95 disabled:opacity-50"
                                     disabled={currentIndex === exam.length - 1 && Object.keys(userAnswers).length < exam.length}
                                 >
@@ -621,103 +611,70 @@
                 
                 setIsGenerating(true);
                 
-                // 1. Determine target question counts by instructional area (IA)
-                const blueprint = currentBlueprint; // Use memoized blueprint based on level
-                const totalBlueprintCount = Object.values(blueprint).reduce((a, b) => a + b, 0);
-                
-                if (totalBlueprintCount === 0) {
-                     alert(`Error: No blueprint questions defined for ${selectedCluster} at ${selectedLevel}. Please check the Exam Blueprints tab.`);
-                     setIsGenerating(false);
-                     return;
-                }
-                
-                // Calculate the scaling factor based on desired exam length / blueprint total
-                const scaleFactor = examLength / totalBlueprintCount;
-                
                 let finalExam = [];
-                const poolByCategory = {};
-                
-                questions.forEach(q => {
-                    if (q.cluster === selectedCluster || q.cluster === "Business Administration Core" || q.cluster === 'AI Generated') {
-                        if (!poolByCategory[q.category]) poolByCategory[q.category] = [];
-                        poolByCategory[q.category].push(q);
-                    }
-                });
-
-                const categories = Object.keys(blueprint).sort();
                 let newQuestionsAccumulator = [];
                 let questionsToPull = [];
                 
-                // 3. Fill exam based on blueprint
-                for (const cat of categories) {
-                    // FIX: Use Math.round to get the scaled target count based on desired examLength
-                    const blueprintCount = blueprint[cat] || 0;
-                    const desiredCount = Math.round(blueprintCount * scaleFactor);
+                // --- Logic Branching for Exam Length ---
+                if (examLength === 100) {
+                    // **100 Q Exam (Use Blueprint Distribution)**
+                    const blueprint = currentBlueprint;
+                    const totalBlueprintCount = Object.values(blueprint).reduce((a, b) => a + b, 0);
+                    const poolByCategory = {};
                     
-                    if (desiredCount <= 0) continue;
+                    questions.forEach(q => {
+                        if (q.cluster === selectedCluster || q.cluster === "Business Administration Core" || q.cluster === 'AI Generated') {
+                            if (!poolByCategory[q.category]) poolByCategory[q.category] = [];
+                            poolByCategory[q.category].push(q);
+                        }
+                    });
 
-                    const available = poolByCategory[cat] || [];
-                    const shuffledAvailable = [...available].sort(() => 0.5 - Math.random());
-                    const existingToUse = shuffledAvailable.slice(0, desiredCount);
-                    
-                    questionsToPull.push(...existingToUse);
+                    const categories = Object.keys(blueprint).sort();
 
-                    const missingCount = desiredCount - existingToUse.length;
-                    
-                    // 4. AI or Placeholder fill for missing questions
-                    if (missingCount > 0) {
-                         // Update progress bar early to indicate activity
-                        setProgress(`Filling ${missingCount} gaps in ${cat} (${INSTRUCTIONAL_AREAS[cat]})...`);
+                    for (const cat of categories) {
+                        const desiredCount = blueprint[cat] || 0;
+                        if (desiredCount <= 0) continue;
+
+                        const available = poolByCategory[cat] || [];
+                        const shuffledAvailable = [...available].sort(() => 0.5 - Math.random());
+                        const existingToUse = shuffledAvailable.slice(0, desiredCount);
                         
-                        if (useAI && APP_CONFIG.GEMINI_API_KEY !== "") {
-                            try {
-                                const prompt = `
-                                    Generate ${missingCount} multiple-choice questions for DECA exam.
-                                    Cluster: ${selectedCluster}
-                                    Instructional Area: ${INSTRUCTIONAL_AREAS[cat]} (${cat}).
-                                    Difficulty: High School Competition Level.
-                                    Format: JSON array ONLY: [{"question": "...", "options": ["A", "B", "C", "D"], "answer": "A", "rationale": "..."}]
-                                    Do NOT include markdown formatting.
-                                `;
-                                
-                                const text = await fetchGeminiContent(prompt);
-                                const parsed = cleanAndParseJSON(text);
-                                const generated = parsed.map(q => ({
-                                    cluster: "AI Generated",
-                                    category: cat,
-                                    pi: "AI Generated based on Blueprint",
-                                    question: q.question,
-                                    options: q.options,
-                                    answer: q.answer,
-                                    rationale: q.rationale || "No rationale provided."
-                                }));
-                                
-                                newQuestionsAccumulator.push(...generated);
-                                questionsToPull.push(...generated);
-                                await new Promise(r => setTimeout(r, Math.min(500, missingCount * 50))); // Slight delay for visible progress
-                            } catch (e) {
-                                console.error("Error generating for", cat, e);
-                                for(let i=0; i<missingCount; i++) questionsToPull.push(createPlaceholder(cat, selectedCluster, i));
-                            }
-                        } else {
+                        questionsToPull.push(...existingToUse);
+                        const missingCount = desiredCount - existingToUse.length;
+                        
+                        if (missingCount > 0) {
+                            setProgress(`Filling ${missingCount} gaps in ${cat} (${INSTRUCTIONAL_AREAS[cat]})...`);
+                            // Since AI generation is failing, we only use placeholders here
                             for(let i=0; i<missingCount; i++) questionsToPull.push(createPlaceholder(cat, selectedCluster, i));
                         }
                     }
+
+                } else {
+                    // **25/50 Q Exam (Random Selection based on overall pool)**
+                    const questionsNeeded = examLength;
+                    const availableQuestions = questions.filter(q => q.cluster === selectedCluster || q.cluster === "Business Administration Core");
+                    
+                    if (availableQuestions.length >= questionsNeeded) {
+                        // Randomly sample from the available pool
+                        questionsToPull = [...availableQuestions].sort(() => 0.5 - Math.random()).slice(0, questionsNeeded);
+                    } else {
+                        // If not enough questions exist, pull all and fill the rest with placeholders
+                        questionsToPull = [...availableQuestions].sort(() => 0.5 - Math.random());
+                        const missingCount = questionsNeeded - questionsToPull.length;
+                        const placeholderCategory = questionsToPull[0]?.category || 'SM';
+                        
+                        setProgress(`Filling ${missingCount} gaps with placeholders.`);
+                        for(let i=0; i<missingCount; i++) questionsToPull.push(createPlaceholder(placeholderCategory, selectedCluster, i));
+                    }
                 }
                 
-                // 5. Save new AI-generated questions to the bank
-                if (newQuestionsAccumulator.length > 0) {
-                    await onAddQuestions(newQuestionsAccumulator);
-                }
-
-                // 6. Final shuffle and trim/pad
+                // 5. Final shuffle and trim/pad (Standardized step for all paths)
                 finalExam = questionsToPull.sort(() => 0.5 - Math.random());
                 
-                // Ensure the final exam size is EXACTLY examLength, handling floating point rounding issues from desiredCount calculation.
+                // Ensure the final exam size is EXACTLY examLength (Critical for stability)
                 if (finalExam.length > examLength) {
                     finalExam = finalExam.slice(0, examLength);
                 } else if (finalExam.length < examLength) {
-                    // Pad if we fell short
                     while (finalExam.length < examLength) {
                         finalExam.push(createPlaceholder("SM", selectedCluster, finalExam.length));
                     }
@@ -756,9 +713,8 @@
                     <h2 className="text-2xl font-bold mb-6 text-slate-800">Generate Practice Exam</h2>
                     <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-8 overflow-y-auto">
                         
-                        <div className="md:col-span-2 space-y-6">
-                            
                             {/* Student Info */}
+                            <div className="md:col-span-2 space-y-6">
                             <div className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
                                 <label className="block text-sm font-medium text-slate-600 mb-2">Student Name</label>
                                 <input 
@@ -1032,70 +988,62 @@
                 });
             };
 
-            // Unified handler for text/file import (from user's previous code)
+            // FIX: Updated parsing logic to correctly handle the new CATEGORY: tag
             const processImportText = async (text) => {
                 const newQuestions = [];
-                const trimmedText = text.trim();
+                const blocks = text.split(/(?:\r?\n){2,}/).filter(block => block.trim().length > 0);
                 
-                // Simple JSON array import
-                if (trimmedText.startsWith("[") && trimmedText.endsWith("]")) {
-                    try {
-                        const jsonData = cleanAndParseJSON(trimmedText);
-                        if (Array.isArray(jsonData)) newQuestions.push(...jsonData);
-                    } catch(e) { setNotification({ type: 'error', msg: "Invalid JSON format." }); return; }
-                } 
-                // Blackboard/XML import (basic heuristic check)
-                else if (trimmedText.startsWith("<?xml") || trimmedText.includes("<POOL>")) {
-                    try {
-                        const parser = new DOMParser();
-                        const xmlDoc = parser.parseFromString(text, "text/xml");
-                        const qNodes = xmlDoc.getElementsByTagName("QUESTION");
-                        Array.from(qNodes).forEach(qNode => {
-                            const qTextNode = qNode.querySelector('BODY TEXT') || qNode.querySelector('BODY');
-                            const aNodes = qNode.querySelectorAll('ANSWER');
-                            
-                            if (qTextNode && aNodes.length >= 2) {
-                                const qText = qTextNode.textContent.replace(/<[^>]*>/g, "").trim();
-                                const options = Array.from(aNodes).map(a => a.textContent.replace(/<[^>]*>/g, "").trim()).filter(t => t);
-                                
-                                if (qText && options.length >= 2) {
-                                     newQuestions.push({
-                                        cluster: "Imported",
-                                        category: importCategory,
-                                        pi: "Imported from Blackboard/Zip",
-                                        question: qText,
-                                        options: options.slice(0,4),
-                                        answer: "A", 
-                                        rationale: "Imported from file."
-                                    });
-                                }
-                            }
-                        });
-                    } catch(e) { setNotification({ type: 'error', msg: "Failed to parse XML/Blackboard format." }); return; }
-                } 
-                // Simple Text/PDF paste
-                else {
-                    const lines = text.split('\n');
-                    let currentQ = {};
+                blocks.forEach((block, index) => {
+                    const lines = block.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+                    let currentQ = { 
+                        cluster: "Imported", 
+                        category: "SM", // Default to SM if not found
+                        pi: "Imported from file (Check PI/Rationale)", 
+                        question: "", 
+                        options: [], 
+                        answer: "" 
+                    };
+                    
+                    let optionsFound = false;
+
                     lines.forEach(line => {
-                        line = line.trim();
-                        if(!line) return;
                         const qStart = line.match(/^(\d+)\.\s+(.*)/);
                         const optStart = line.match(/^([A-D])\.\s+(.*)/);
+                        const answerMatch = line.match(/^ANSWER:\s*([A-D])/i);
+                        const categoryMatch = line.match(/^CATEGORY:\s*([A-Z]{2,})/i);
+                        const piRationaleMatch = line.match(/^PI\/Rationale:\s*(.*)/i);
                         
                         if (qStart) {
-                            if (currentQ.question && currentQ.options && currentQ.options.length >= 2) {
-                                newQuestions.push(currentQ);
-                            }
-                            currentQ = { cluster: "Imported", category: importCategory, question: qStart[2], options: [], answer: "A", rationale: "Text import (Check Answer/PI)" };
+                            if (currentQ.question && currentQ.options.length > 0) newQuestions.push(currentQ);
+                            currentQ = { 
+                                cluster: "Imported", 
+                                category: "SM", 
+                                pi: "Imported from file (Check PI/Rationale)", 
+                                question: qStart[2], 
+                                options: [], 
+                                answer: "" 
+                            };
+                            optionsFound = false;
                         } else if (optStart && currentQ.question) {
                             currentQ.options.push(optStart[2]);
+                            optionsFound = true;
+                        } else if (answerMatch) {
+                            currentQ.answer = answerMatch[1].toUpperCase();
+                        } else if (categoryMatch) {
+                            currentQ.category = categoryMatch[1].toUpperCase(); // Capture and use explicit IA code
+                        } else if (piRationaleMatch) {
+                            currentQ.pi = piRationaleMatch[1].trim();
+                        } else if (!currentQ.question && line.length > 0) {
+                            // Treat the first line as the question if it's not numbered
+                            currentQ.question = line;
                         }
                     });
-                    if (currentQ.question && currentQ.options && currentQ.options.length >= 2) {
+
+                    if (currentQ.question && currentQ.options.length >= 2) {
                         newQuestions.push(currentQ);
                     }
-                }
+                });
+
 
                 if (newQuestions.length > 0) {
                     await onAddQuestions(newQuestions);
@@ -1290,7 +1238,16 @@
                                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".zip,.txt,.xml,.json"/>
                                 <button onClick={() => fileInputRef.current.click()} className="px-4 py-2 bg-blue-100 text-blue-700 rounded border border-blue-200 hover:bg-blue-200 flex items-center gap-2"><FileUp size={18}/> Upload File</button>
                             </div>
-                            <textarea className="flex-1 w-full p-4 border rounded-lg font-mono text-xs shadow-inner" placeholder="Or paste structured JSON or plain text here..." value={importText} onChange={e => setImportText(e.target.value)}/>
+                            <textarea className="flex-1 w-full p-4 border rounded-lg font-mono text-xs shadow-inner" placeholder={`Or paste structured text here (use ANSWER: and CATEGORY: tags)...
+Example:
+What is the process of defining a business's target market and marketing mix?
+A. Promotion
+B. Product Development
+C. Market Planning
+D. Sales Strategy
+ANSWER: C
+CATEGORY: MP
+PI/Rationale: Explain the nature of market planning.`} value={importText} onChange={e => setImportText(e.target.value)}/>
                             <button onClick={() => processImportText(importText)} className="w-full py-3 bg-slate-800 text-white rounded font-bold transition-transform active:scale-95">Process Text</button>
                         </div>
                     )}
@@ -1768,7 +1725,7 @@
                             userAnswers={userAnswers}
                             setUserAnswers={setUserAnswers}
                             currentIndex={currentQuestionIndex}
-                            setCurrentIndex={setCurrentQuestionIndex}
+                            setCurrentIndex={setCurrentIndex}
                             studentName={studentName}
                             onSaveSubmission={handleSaveSubmission}
                             onExit={() => {
