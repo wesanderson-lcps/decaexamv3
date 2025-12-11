@@ -262,6 +262,20 @@
         // --- EXAM SESSION ---
 
         function ExamSession({ exam, mode, setMode, userAnswers, setUserAnswers, currentIndex, setCurrentIndex, onExit, onSaveSubmission, studentName }) {
+            
+            // Defensive check for exam state stability
+            if (!exam || exam.length === 0 || currentIndex >= exam.length || currentIndex < 0) {
+                 console.error("ExamSession mounted with invalid exam state.", {exam, currentIndex});
+                 return (
+                     <div className="p-8 text-center flex flex-col items-center justify-center h-full">
+                        <AlertCircle size={48} className="text-red-500 mb-4"/>
+                        <h2 className="text-2xl font-bold mb-3">Error: Exam Data Invalid or Missing</h2>
+                        <p className="text-slate-600">The exam could not be loaded. This might be due to a generation failure. Please try again from the "Generate Test" tab.</p>
+                        <button onClick={onExit} className="mt-4 px-6 py-2 bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-2"><Home size={18}/> Back to Generator</button>
+                    </div>
+                );
+            }
+
             const currentQ = exam[currentIndex];
             const [explanation, setExplanation] = useState(null);
             const [isExplaining, setIsExplaining] = useState(false);
@@ -374,7 +388,7 @@
                 return (
                      <div className="p-8 text-center flex flex-col items-center justify-center h-full">
                         <AlertCircle size={48} className="text-red-500 mb-4"/>
-                        <h2 className="text-2xl font-bold mb-3">Error: Exam Data Missing</h2>
+                        <h2 className="text-2xl font-bold mb-3">Error: Exam Data Missing or Invalid</h2>
                         <p className="text-slate-600">Please return to the "Generate Test" tab to start a new exam.</p>
                         <button onClick={onExit} className="mt-4 px-6 py-2 bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-2"><Home size={18}/> Back to Generator</button>
                     </div>
@@ -554,7 +568,7 @@
                             
                             {mode === 'taking' ? (
                                 <button 
-                                    onClick={() => currentIndex === exam.length - 1 ? setShowReview(true) : setCurrentIndex(c => c+1)} 
+                                    onClick={() => setCurrentIndex(c => Math.min(exam.length - 1, c+1))} 
                                     className="px-8 py-2 bg-blue-600 text-white rounded-r-lg font-bold hover:bg-blue-700 shadow-md transition-transform active:scale-95 disabled:opacity-50"
                                     disabled={currentIndex === exam.length - 1 && Object.keys(userAnswers).length < exam.length}
                                 >
@@ -714,6 +728,13 @@
                     setIsGenerating(false);
                     return;
                 }
+
+                // Log final state for debugging before handing off to ExamSession
+                console.log("--- Exam Generation SUCCESSFUL ---");
+                console.log(`Requested Length: ${examLength}, Final Exam Length: ${finalExam.length}`);
+                console.log("First Question:", finalExam[0]);
+                console.log("----------------------------------");
+
 
                 setIsGenerating(false);
                 onStartExam(finalExam, studentName);
@@ -1747,12 +1768,22 @@
                             userAnswers={userAnswers}
                             setUserAnswers={setUserAnswers}
                             currentIndex={currentQuestionIndex}
-                            setCurrentIndex={setCurrentIndex}
+                            setCurrentIndex={setCurrentQuestionIndex}
                             studentName={studentName}
                             onSaveSubmission={handleSaveSubmission}
-                            onExit={() => setActiveTab('generate')}
+                            onExit={() => {
+                                setGeneratedExam(null); // Reset exam state on exit
+                                setActiveTab('generate');
+                            }}
                         />
-                    ) : <div className="p-8 text-center text-slate-500">No active exam session. Start one from the Generate Test tab.</div>;
+                    ) : (
+                         <div className="p-8 text-center flex flex-col items-center justify-center h-full">
+                            <AlertCircle size={48} className="text-red-500 mb-4"/>
+                            <h2 className="text-2xl font-bold mb-3">Exam Not Ready</h2>
+                            <p className="text-slate-600">Please return to the "Generate Test" tab to select your options and start a new exam.</p>
+                            <button onClick={() => setActiveTab('generate')} className="mt-4 px-6 py-2 bg-slate-900 text-white rounded hover:bg-slate-800 flex items-center gap-2"><Play size={18}/> Go to Generator</button>
+                        </div>
+                    );
                 }
             };
 
