@@ -1238,7 +1238,8 @@
                                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".zip,.txt,.xml,.json"/>
                                 <button onClick={() => fileInputRef.current.click()} className="px-4 py-2 bg-blue-100 text-blue-700 rounded border border-blue-200 hover:bg-blue-200 flex items-center gap-2"><FileUp size={18}/> Upload File</button>
                             </div>
-                            <textarea className="flex-1 w-full p-4 border rounded-lg font-mono text-xs shadow-inner" placeholder={`Or paste structured text here (use ANSWER: and CATEGORY: tags)...
+                            {/* FIX: Increased Import Textarea Size */}
+                            <textarea className="flex-1 w-full p-4 border rounded-lg font-mono text-xs shadow-inner min-h-[300px]" placeholder={`Or paste structured text here (use ANSWER: and CATEGORY: tags)...
 Example:
 What is the process of defining a business's target market and marketing mix?
 A. Promotion
@@ -1725,7 +1726,7 @@ PI/Rationale: Explain the nature of market planning.`} value={importText} onChan
                             userAnswers={userAnswers}
                             setUserAnswers={setUserAnswers}
                             currentIndex={currentQuestionIndex}
-                            setCurrentIndex={setCurrentIndex}
+                            setCurrentIndex={setCurrentQuestionIndex}
                             studentName={studentName}
                             onSaveSubmission={handleSaveSubmission}
                             onExit={() => {
