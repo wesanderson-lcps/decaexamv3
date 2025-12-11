@@ -1281,7 +1281,7 @@
                                 <p className='text-sm text-slate-600'>Select the Instructional Area for targeted question generation:</p>
                                 <select value={aiCategory} onChange={e => setAiCategory(e.target.value)} className="w-full p-3 border rounded-lg">{Object.keys(INSTRUCTIONAL_AREAS).map(k => <option key={k} value={k}>{k}: {INSTRUCTIONAL_AREAS[k]}</option>)}</select>
                                 <select value={aiCount} onChange={e => setAiCount(Number(e.target.value))} className="w-full p-3 border rounded-lg"><option value="1">1 Question</option><option value="5">5 Questions</option><option value="10">10 Questions</option></select>
-                                <button onClick={handleAIGenerate} disabled={isGenerating} className="w-full py-3 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-transform active:scale-95 flex items-center justify-center gap-2">
+                                <button onClick={handleAIGenerate} disabled={isGenerating} className="w-full py-3 bg-purple-600 text-white font-bold hover:bg-purple-700 transition-transform active:scale-95 flex items-center justify-center gap-2">
                                     {isGenerating ? <Loader2 size={18} className="animate-spin"/> : <Zap size={18}/>}
                                     {isGenerating ? "Generating..." : "Generate and Save to Bank"}
                                 </button>
