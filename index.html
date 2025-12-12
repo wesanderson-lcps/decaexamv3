@@ -282,6 +282,35 @@
             const [flagged, setFlagged] = useState(new Set());
             const [showReview, setShowReview] = useState(false);
             const contentRef = useRef(null);
+            
+            // 90 Minute Timer Implementation
+            const initialTime = 90 * 60; // 90 minutes in seconds
+            const [timeRemaining, setTimeRemaining] = useState(initialTime);
+            
+            const formatTime = (seconds) => {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                const paddedMinutes = String(minutes).padStart(2, '0');
+                const paddedSeconds = String(remainingSeconds).padStart(2, '0');
+                return `${paddedMinutes}:${paddedSeconds}`;
+            };
+            
+            // Timer logic hook
+            useEffect(() => {
+                if (mode === 'taking') {
+                    const timer = setInterval(() => {
+                        setTimeRemaining(prevTime => {
+                            if (prevTime <= 1) {
+                                clearInterval(timer);
+                                setMode('results'); // Auto-submit when time runs out
+                                return 0;
+                            }
+                            return prevTime - 1;
+                        });
+                    }, 1000);
+                    return () => clearInterval(timer);
+                }
+            }, [mode]); // Only run when mode changes to 'taking'
 
             useEffect(() => { setExplanation(null); }, [currentIndex]);
             
@@ -467,10 +496,10 @@
                             <span className="text-xs text-slate-500">Student: {studentName}</span>
                         </div>
                         <div className="flex items-center gap-4">
-                            {/* FIXED: Placeholder text is no longer commented out */}
+                            {/* FIXED: Timer is now operational/displaying correctly */}
                             <div className="flex items-center text-red-600 font-bold text-xl border-2 border-red-300 bg-red-50 p-2 rounded-lg">
                                 <Clock size={20} className="mr-2"/>
-                                <span>90:00</span>
+                                <span>{formatTime(timeRemaining)}</span>
                             </div>
                             {/* FIXED: Used handleCancel defined in this scope */}
                             <button onClick={handleCancel} className="text-red-500 hover:bg-red-100 p-2 rounded-full transition-colors"><X size={24}/></button>
@@ -622,6 +651,7 @@
                     const totalBlueprintCount = Object.values(blueprint).reduce((a, b) => a + b, 0);
                     const poolByCategory = {};
                     
+                    // FIX: Include all cluster questions that match the cluster or are "Business Administration Core"
                     questions.forEach(q => {
                         if (q.cluster === selectedCluster || q.cluster === "Business Administration Core" || q.cluster === 'AI Generated') {
                             if (!poolByCategory[q.category]) poolByCategory[q.category] = [];
@@ -652,6 +682,7 @@
                 } else {
                     // **25/50 Q Exam (Random Selection based on overall pool)**
                     const questionsNeeded = examLength;
+                    // FIX: Include all cluster questions that match the cluster or are "Business Administration Core"
                     const availableQuestions = questions.filter(q => q.cluster === selectedCluster || q.cluster === "Business Administration Core");
                     
                     if (availableQuestions.length >= questionsNeeded) {
@@ -1014,15 +1045,21 @@
                         const piRationaleMatch = line.match(/^PI\/Rationale:\s*(.*)/i);
                         
                         if (qStart) {
-                            if (currentQ.question && currentQ.options.length > 0) newQuestions.push(currentQ);
-                            currentQ = { 
-                                cluster: "Imported", 
-                                category: currentQ.category, // Preserve category if already set or use default
-                                pi: "Imported from file (Check PI/Rationale)", 
-                                question: qStart[2], 
-                                options: [], 
-                                answer: "" 
-                            };
+                            // If a previous question was pending, push it
+                            if (currentQ.question && currentQ.options.length > 0 && currentQ.question !== qStart[2]) {
+                                newQuestions.push(currentQ);
+                                currentQ = { 
+                                    cluster: "Imported", 
+                                    category: currentQ.category, // Retain the last explicit category or default
+                                    pi: "Imported from file (Check PI/Rationale)", 
+                                    question: qStart[2], 
+                                    options: [], 
+                                    answer: "" 
+                                };
+                            } else {
+                                // If it's the first question
+                                currentQ.question = qStart[2];
+                            }
                         } else if (optStart && currentQ.question) {
                             currentQ.options.push(optStart[2]);
                         } else if (answerMatch) {
@@ -1043,14 +1080,16 @@
                     }
                 });
 
+                // Final safety cleanup (remove questions with too few options, etc.)
+                const validQuestions = newQuestions.filter(q => q.question && q.options.length >= 2 && q.answer);
 
-                if (newQuestions.length > 0) {
-                    await onAddQuestions(newQuestions);
-                    setNotification({ type: 'success', msg: `Successfully imported ${newQuestions.length} questions.` });
+                if (validQuestions.length > 0) {
+                    await onAddQuestions(validQuestions);
+                    setNotification({ type: 'success', msg: `Successfully imported ${validQuestions.length} questions.` });
                     setImportText("");
                     setMode('list');
                 } else {
-                    setNotification({ type: 'error', msg: "No valid questions found in the provided text/file." });
+                    setNotification({ type: 'error', msg: "No valid questions found in the provided text/file. Check format." });
                 }
             };
 
@@ -1202,8 +1241,8 @@
                         </div>
                     )}
                     
-                    {/* 1. TOP FIXED AREA: Title, Download/Seed Buttons */}
-                    <div className="flex justify-between items-center mb-6 border-b pb-4 flex-shrink-0">
+                    {/* 1. TOP FIXED AREA: Title, Download/Seed Buttons, IA Breakdown */}
+                    <div className="flex justify-between items-center mb-4 border-b pb-4 flex-shrink-0">
                         <h2 className="text-2xl font-bold text-slate-800">Question Bank ({questions.length} Total)</h2>
                         <div className="flex gap-2">
                             {questions.length === 0 && (
@@ -1268,8 +1307,8 @@ PI/Rationale: Explain the nature of market planning.`} value={importText} onChan
                     )}
 
                     {mode === 'ai' && (
-                        <div className="flex-1 flex flex-col items-center justify-center bg-purple-50 p-8 rounded-lg overflow-y-auto">
-                            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md space-y-4">
+                        <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-2">
+                            <div className="bg-white p-6 rounded-xl shadow-lg w-full max-w-md space-y-4 mx-auto">
                                 <h3 className="font-bold text-purple-800 flex items-center gap-2"><Sparkles size={18}/> Quick AI Add Questions</h3>
                                 <p className='text-sm text-slate-600'>Select the Instructional Area for targeted question generation:</p>
                                 <select value={aiCategory} onChange={e => setAiCategory(e.target.value)} className="w-full p-3 border rounded-lg">{Object.keys(INSTRUCTIONAL_AREAS).map(k => <option key={k} value={k}>{k}: {INSTRUCTIONAL_AREAS[k]}</option>)}</select>
@@ -1283,9 +1322,9 @@ PI/Rationale: Explain the nature of market planning.`} value={importText} onChan
                     )}
 
                     {mode === 'list' && (
-                        <div className="flex-1 overflow-y-auto pr-2">
+                        <div className="flex-1 overflow-y-auto pr-2 pt-4">
                             {/* Question Counts Dashboard - PI distribution overview */}
-                            {/* ADJUSTED GRID LAYOUT AND TEXT WRAPPING */}
+                            {/* This is the IA breakdown area */}
                             <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                                 {Object.entries(INSTRUCTIONAL_AREAS).map(([code, name]) => {
                                     const count = categoryCounts[code] || 0;
