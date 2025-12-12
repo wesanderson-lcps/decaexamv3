@@ -1045,7 +1045,6 @@
                         const piRationaleMatch = line.match(/^PI\/Rationale:\s*(.*)/i);
                         
                         if (qStart) {
-                            // If a previous question was pending, push it
                             if (currentQ.question && currentQ.options.length > 0 && currentQ.question !== qStart[2]) {
                                 newQuestions.push(currentQ);
                                 currentQ = { 
@@ -1241,7 +1240,7 @@
                         </div>
                     )}
                     
-                    {/* 1. TOP FIXED AREA: Title, Download/Seed Buttons, IA Breakdown */}
+                    {/* 1. TOP FIXED AREA: Title, Download/Seed Buttons */}
                     <div className="flex justify-between items-center mb-4 border-b pb-4 flex-shrink-0">
                         <h2 className="text-2xl font-bold text-slate-800">Question Bank ({questions.length} Total)</h2>
                         <div className="flex gap-2">
@@ -1773,7 +1772,7 @@ PI/Rationale: Explain the nature of market planning.`} value={importText} onChan
                             userAnswers={userAnswers}
                             setUserAnswers={setUserAnswers}
                             currentIndex={currentQuestionIndex}
-                            setCurrentIndex={setCurrentQuestionIndex}
+                            setCurrentIndex={setCurrentIndex}
                             studentName={studentName}
                             onSaveSubmission={handleSaveSubmission}
                             onExit={() => {
