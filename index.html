@@ -193,7 +193,7 @@
 
         const INITIAL_QUESTIONS = [
             { id: "q1", cluster: "Finance", category: "FI", pi: "Explain the nature of financial risk management", question: "Which risk type involves changes in interest rates or economic conditions that affect investment value?", options: ["A. Business Risk", "B. Financial Risk", "C. Market Risk", "D. Liquidity Risk"], answer: "C", rationale: "Market risk encompasses broad economic factors like interest rate changes or political unrest affecting the entire market." },
-            { id: "q2", cluster: "Marketing", category: "CM", pi: "Explain the nature of channels of distribution", question: "A marketing channel that involves no intermediaries is defined as a(n):", options: ["A. Indirect channel", "B. Direct channel", "C. Exclusive channel", "D. Selective channel"], answer: "B", rationale: "A direct channel moves a product directly from the producer to the consumer without any intermediaries." },
+            { id: "q2", cluster: "Marketing", category: "CM", pi: "Explain the nature of channels of distribution", question: "A marketing channel that involves no intermediaries is defined as a(n):", options: ["A. Indirect channel", "B. Direct channel", "C. Exclusive channel", "D. Selective channel"], answer: "B", rationale: "A marketing channel moves a product directly from the producer to the consumer without any intermediaries." },
             { id: "q3", cluster: "Business Administration Core", category: "CO", pi: "Demonstrate active listening skills", question: "What is the primary purpose of paraphrasing a speaker's message during a conversation?", options: ["A. To correct any inaccuracies in the message.", "B. To demonstrate comprehension and ensure clarity.", "C. To dominate the conversation flow.", "D. To prepare your own immediate rebuttal."], answer: "B", rationale: "Paraphrasing confirms that the listener correctly understood the message and provides the speaker with clarity." }
         ];
 
@@ -1028,7 +1028,8 @@
                         } else if (answerMatch) {
                             currentQ.answer = answerMatch[1].toUpperCase();
                         } else if (categoryMatch) {
-                            currentQ.category = categoryMatch[1].toUpperCase(); // Capture and use explicit IA code
+                            // FIX: Capture and use explicit IA code, prioritizing it over the dropdown default
+                            currentQ.category = categoryMatch[1].toUpperCase(); 
                         } else if (piRationaleMatch) {
                             currentQ.pi = piRationaleMatch[1].trim();
                         } else if (!currentQ.question && line.length > 0) {
@@ -1164,7 +1165,7 @@
                     {/* Question View/Edit Modal (Combined) */}
                     {selectedQuestion && (
                         <div className="absolute inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4 backdrop-blur-sm">
-                            {/* FIX: Made the inner modal content scrollable */}
+                            {/* FIX: Made the inner modal content scrollable, maximized size */}
                             <div className="bg-white p-8 rounded-xl shadow-2xl max-w-3xl w-full border border-slate-200 flex flex-col max-h-[90vh] overflow-y-auto">
                                 <div className="flex justify-between items-start mb-4 border-b pb-3 flex-shrink-0">
                                     <div>
@@ -1178,7 +1179,6 @@
                                         <button onClick={() => setSelectedQuestion(null)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full"><X size={20}/></button>
                                     </div>
                                 </div>
-                                {/* Removed flex-1 and overflow-y-auto from this div as the parent now manages scrolling */}
                                 <div className="break-words">
                                     <p className="text-lg text-slate-800 mb-6 font-medium">{selectedQuestion.question}</p>
                                     <div className="space-y-2 mb-6">
@@ -1202,8 +1202,8 @@
                         </div>
                     )}
                     
-                    {/* --- HEADER CONTROLS --- */}
-                    <div className="flex justify-between items-center mb-6 border-b pb-4">
+                    {/* --- HEADER CONTROLS --- (Top Section) */}
+                    <div className="flex justify-between items-center mb-6 border-b pb-4 flex-shrink-0">
                         <h2 className="text-2xl font-bold text-slate-800">Question Bank ({questions.length} Total)</h2>
                         <div className="flex gap-2">
                             {questions.length === 0 && (
@@ -1212,18 +1212,31 @@
                             {isAdmin && (
                                 <>
                                     <button onClick={handleDownloadBank} className="flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded hover:bg-blue-100" title="Save Bank to JSON File"><Download size={16}/><span className="hidden md:inline">Backup</span></button>
-                                    <button onClick={() => setShowDeleteConfirm(true)} className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100" title="Delete All Questions"><Trash2 size={16}/></button>
                                 </>
                             )}
                         </div>
                     </div>
                     
-                    {/* --- MODE SWITCHER & CONTENT --- */}
-                    <div className="flex-shrink-0 mb-4 flex gap-4">
-                        <button onClick={() => setMode('list')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-colors ${mode === 'list' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}><List size={16}/> View List</button>
-                        <button onClick={() => setMode('import')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-colors ${mode === 'import' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}><Plus size={16}/> Import Text/File</button>
-                        <button onClick={() => setMode('ai')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-colors ${mode === 'ai' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}><Sparkles size={16}/> AI Generate</button>
+                    {/* --- MODE SWITCHER & FILTER AREA (MIDDLE SECTION) --- */}
+                    {/* The original bottom delete button is now here */}
+                    <div className="flex-shrink-0 mb-4 flex flex-col gap-4 sticky top-0 bg-white pt-2 z-10 border-b pb-4">
+                        <div className="flex gap-4">
+                            <button onClick={() => setMode('list')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-colors ${mode === 'list' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}><List size={16}/> View List</button>
+                            <button onClick={() => setMode('import')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-colors ${mode === 'import' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}><Plus size={16}/> Import Text/File</button>
+                            <button onClick={() => setMode('ai')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold transition-colors ${mode === 'ai' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}><Sparkles size={16}/> AI Generate</button>
+                        </div>
+                         <div className="flex flex-col md:flex-row gap-2 items-center justify-between">
+                             <input type="text" placeholder={`Search ${filteredQuestions.length} questions...`} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-1 p-2 border rounded"/>
+                            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="p-2 border rounded w-full md:w-48"><option value="ALL">All Categories</option>{Object.keys(INSTRUCTIONAL_AREAS).map(k => <option key={k} value={k}>{k}: {INSTRUCTIONAL_AREAS[k]}</option>)}</select>
+                            <button onClick={() => setViewFormat(viewFormat === 'list' ? 'grid' : 'list')} className="p-2 border rounded bg-white hover:bg-slate-50 text-slate-600" title="Toggle View">
+                                {viewFormat === 'list' ? <Grid size={20}/> : <List size={20}/>}
+                            </button>
+                             {isAdmin && (
+                                <button onClick={() => setShowDeleteConfirm(true)} className="px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 flex items-center gap-1 flex-shrink-0" title="Delete All Questions"><Trash2 size={16}/> Delete All</button>
+                            )}
+                        </div>
                     </div>
+                    {/* --- END MODE SWITCHER & FILTER AREA (MIDDLE SECTION) --- */}
 
                     {mode === 'import' && (
                         <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-2">
@@ -1231,7 +1244,7 @@
                                 <strong>Import Options:</strong> Supports JSON arrays, raw text paste (like from PDFs), and Blackboard/XML ZIP files.
                             </div>
                             <div className="bg-white p-4 border rounded-lg shadow-sm">
-                                <label className="block text-xs font-bold text-slate-500 mb-1">Default Category for Imported Questions (e.g., EC if not specified)</label>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">Default Category for Imported Questions (used if CATEGORY: tag is missing)</label>
                                 <select value={importCategory} onChange={e => setImportCategory(e.target.value)} className="w-full p-2 border rounded">{Object.keys(INSTRUCTIONAL_AREAS).map(k => <option key={k} value={k}>{k}: {INSTRUCTIONAL_AREAS[k]}</option>)}</select>
                             </div>
                             <div className="flex gap-2">
@@ -1302,13 +1315,7 @@ PI/Rationale: Explain the nature of market planning.`} value={importText} onChan
                                 })}
                             </div>
 
-                            <div className="flex flex-col md:flex-row gap-2 mb-4 sticky top-0 bg-white pt-2 z-10 border-t border-b py-4">
-                                <input type="text" placeholder={`Search ${filteredQuestions.length} questions...`} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-1 p-2 border rounded"/>
-                                <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="p-2 border rounded w-full md:w-48"><option value="ALL">All Categories</option>{Object.keys(INSTRUCTIONAL_AREAS).map(k => <option key={k} value={k}>{k}: {INSTRUCTIONAL_AREAS[k]}</option>)}</select>
-                                <button onClick={() => setViewFormat(viewFormat === 'list' ? 'grid' : 'list')} className="p-2 border rounded bg-white hover:bg-slate-50 text-slate-600" title="Toggle View">
-                                    {viewFormat === 'list' ? <Grid size={20}/> : <List size={20}/>}
-                                </button>
-                            </div>
+                            {/* QUESTION LIST AREA */}
                             
                             {filteredQuestions.length === 0 ? (
                                 <p className="text-center text-slate-400 p-10">No questions match the current filter/search criteria.</p>
